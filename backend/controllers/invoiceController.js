@@ -4,17 +4,58 @@ const Company = require('../models/coreModel/EntrepriseSetting');
 const nodemailer = require('nodemailer');
 const fs = require('fs');
 const path = require('path');
+const archiver = require('archiver');
 const mongoose = require('mongoose');
 const { DiffieHellmanGroup } = require('crypto');
+const multer = require('multer');
+// Setup storage and filename for uploaded files
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, './uploads/invoices'); // Directory to store uploaded files
+  },
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname);
+    cb(null, `${Date.now()}${ext}`); // Unique file name
+  }
+});
+
+// Filter for image file types
+const fileFilter = (req, file, cb) => {
+  const allowedTypes = ['image/jpeg', 'image/png', 'image/jpg'];
+  if (allowedTypes.includes(file.mimetype)) {
+    cb(null, true);
+  } else {
+    cb(new Error('Invalid file type. Only JPG, PNG, and JPEG are allowed.'), false);
+  }
+};
+
+// Multer setup
+ exports.uploadFac = multer({
+  storage: storage,
+ // Limit size to 5MB
+});
+
 // Create Invoice
+
+// Assuming you have the upload middleware already set up
+
 exports.createInvoice = async (req, res) => {
   try {
     const { client, number, year, currency, status, type, date, expirationDate, note, items, subtotal, tax, taxAmount, total, paidAmount, createdBy } = req.body;
+
+    // Check if an invoice with the same number and year already exists
     const existingInvoice = await Invoice.findOne({ number, year });
     if (existingInvoice) {
       return res.status(400).json({ message: 'Invoice number already exists for this year.' });
     }
 
+    // Get facture image if uploaded
+    let factureImagePath = null;
+    if (req.file) {
+      factureImagePath = req.file.path; // This will give you the path to the uploaded file
+    }
+
+    // Create a new invoice
     const newInvoice = new Invoice({
       client,
       number,
@@ -32,14 +73,20 @@ exports.createInvoice = async (req, res) => {
       total,
       paidAmount,
       createdBy,
+      factureImage: factureImagePath // Save the image path in the invoice
     });
 
+    // Save the new invoice in the database
     await newInvoice.save();
+
     res.status(201).json(newInvoice);
   } catch (error) {
     res.status(500).json({ message: 'Error creating invoice', error });
   }
 };
+
+// Expose the upload middleware with route handler
+
 
 // Get all invoices (with optional filtering by type and status)
 exports.getInvoices = async (req, res) => {
@@ -209,6 +256,7 @@ exports.updatePaymentStatus = async (req, res) => {
 
 
 // Function to generate an invoice PDF with dynamic company and invoice information
+
 exports.generateInvoicePDF = async (req, res) => {
   const { id, createdBy } = req.params;
 
@@ -225,106 +273,301 @@ exports.generateInvoicePDF = async (req, res) => {
       return res.status(404).json({ message: 'Invoice not found' });
     }
 
-    // Create a new PDF document
-    const doc = new PDFDocument({ margin: 50 });
+    // Handle Proforma type with factureImage
+    if (invoice.type === 'Proforma' && invoice.factureImage) {
+      const imagePath = path.join(__dirname, '../', invoice.factureImage);
 
-    // Set the response to download the PDF
-    res.setHeader('Content-disposition', `attachment; filename=invoice-${invoice.number}.pdf`);
-    res.setHeader('Content-type', 'application/pdf');
-    if(invoice.client.person!=null){
-        res.setHeader('Content-disposition', `attachment; filename=invoice- ${invoice.client.person.nom} ${invoice.client.person.prenom} ${invoice.number}.pdf`);
-        res.setHeader('Content-type', 'application/pdf');
-       
-     }
-     if(invoice.client.entreprise!=null){
-        res.setHeader('Content-disposition', `attachment; filename=invoice- ${invoice.client.entreprise.nom}${invoice.number}.pdf`);
-        res.setHeader('Content-type', 'application/pdf');
-    
-     }
-    // Pipe the PDF into the response
-    doc.pipe(res);
+      // Set the custom file name for the download
+      let customFileName = `invoice-${invoice.number}.pdf`;
 
-    // // Add the company logo
-    // if (company.logo!==null) {
-    //   doc.image(company.logo, 50, 45, { width: 100 });
-    // } else {
-    //   doc.text('Logo Placeholder', 50, 45, { width: 100 });
-    // }
+      if (invoice.client.person != null) {
+        customFileName = `invoice-${invoice.client.person.nom}-${invoice.client.person.prenom}-${invoice.number}.pdf`;
+      } else if (invoice.client.entreprise != null) {
+        customFileName = `invoice-${invoice.client.entreprise.nom}-${invoice.number}.pdf`;
+      }
 
-    // Add company information
-    doc.fontSize(20).text(company.name.toUpperCase(), 160, 57).moveDown();
-    doc.fontSize(10)
-      .text(company.address, 200, 65, { align: 'right' })
-      .text(company.state, 200, 80, { align: 'right' })
-      .text(company.country, 200, 95, { align: 'right' })
-     
+      // Check if the factureImage file exists
+      if (fs.existsSync(imagePath)) {
+        // Check if the file is already a PDF
+        if (path.extname(imagePath).toLowerCase() === '.pdf') {
+          // If the file is already a PDF, send it directly as a download
+          return res.download(imagePath, customFileName, (err) => {
+            if (err) {
+              if (!res.headersSent) {
+                return res.status(500).json({ message: 'Error downloading facture image', error: err });
+              }
+            }
+          });
+        } else {
+          // If the file is not a PDF, create a PDF with the image
+          const doc = new PDFDocument();
+          const pdfPath = path.join(__dirname, '../', `converted-${invoice.number}.pdf`);
 
-    // Add invoice title
-    doc.fontSize(20).fillColor('#5F259F').text('Facture', 50, 160);
+          // Stream the PDF to the file system
+          const writeStream = fs.createWriteStream(pdfPath);
+          doc.pipe(writeStream);
 
-    // Add invoice details
-    doc.fontSize(10).fillColor('black')
-      .text(`Date : ${invoice.date.toLocaleDateString()}`, 50, 200)
-      .text(`Numéro : # ${invoice.number}/${invoice.year}`, 50, 230)
-      .moveDown();
+          // Add the image to the PDF
+          doc.image(imagePath, {
+            fit: [500, 500], // Resize the image to fit within the PDF
+            align: 'center',
+            valign: 'center',
+          });
 
-      
-     if(invoice.client.person!=null){
+          // Add some details (optional)
+          doc.text(`Invoice Number: ${invoice.number}`, { align: 'center' });
+          if (invoice.client.person) {
+            doc.text(`Client: ${invoice.client.person.nom} ${invoice.client.person.prenom}`, { align: 'center' });
+          } else if (invoice.client.entreprise) {
+            doc.text(`Client: ${invoice.client.entreprise.nom}`, { align: 'center' });
+          }
+
+          // Finalize the PDF and end the stream
+          doc.end();
+
+          // Wait for the PDF to finish writing before downloading
+          writeStream.on('finish', () => {
+            // Send the generated PDF as a download
+            return res.download(pdfPath, customFileName, (err) => {
+              if (err) {
+                if (!res.headersSent) {
+                  return res.status(500).json({ message: 'Error downloading converted PDF', error: err });
+                }
+              }
+
+              // Optionally delete the generated PDF after download
+              fs.unlink(pdfPath, (unlinkErr) => {
+                if (unlinkErr) {
+                  console.error('Error deleting temporary PDF:', unlinkErr);
+                }
+              });
+            });
+          });
+        }
+      } else {
+        if (!res.headersSent) {
+          return res.status(404).json({ message: 'Facture image not found' });
+        }
+      }
+    } else {
+      // Handle normal PDF generation for non-Proforma invoices
+      const doc = new PDFDocument({ margin: 50 });
+
+      // Set the response to download the PDF
+      res.setHeader('Content-disposition', `attachment; filename=invoice-${invoice.number}.pdf`);
+      res.setHeader('Content-type', 'application/pdf');
+
+      if (invoice.client.person != null) {
+        res.setHeader('Content-disposition', `attachment; filename=invoice-${invoice.client.person.nom}-${invoice.client.person.prenom}-${invoice.number}.pdf`);
+      }
+      if (invoice.client.entreprise != null) {
+        res.setHeader('Content-disposition', `attachment; filename=invoice-${invoice.client.entreprise.nom}-${invoice.number}.pdf`);
+      }
+
+      // Pipe the PDF into the response
+      doc.pipe(res);
+
+      // Add company information
+      doc.fontSize(20).text(company.name.toUpperCase(), 160, 57).moveDown();
+      doc.fontSize(10)
+        .text(company.address, 200, 65, { align: 'right' })
+        .text(company.state, 200, 80, { align: 'right' })
+        .text(company.country, 200, 95, { align: 'right' });
+
+      // Add invoice title
+      doc.fontSize(20).fillColor('#5F259F').text('Facture', 50, 160);
+
+      // Add invoice details
+      doc.fontSize(10).fillColor('black')
+        .text(`Date : ${invoice.date.toLocaleDateString()}`, 50, 200)
+        .text(`Numéro : # ${invoice.number}/${invoice.year}`, 50, 230)
+        .moveDown();
+
+      if (invoice.client.person != null) {
         doc.text(`Nom du client : ${invoice.client.person.nom} ${invoice.client.person.prenom} `, 200, 220, { align: 'right' });
-     }
-     if(invoice.client.entreprise!=null){
+      }
+      if (invoice.client.entreprise != null) {
         doc.text(`Nom du client : ${invoice.client.entreprise.nom}`, 200, 220, { align: 'right' });
-     }
-  
-  
+      }
 
-    // Add table headers
-    doc.moveDown().fillColor('#5F259F').fontSize(12)
-      .text('Article', 50, 270)
-      .text('Quantité', 100, 270, { align: 'center' })
-      .text('Prix', 250, 270, { align: 'center' })
-      .text('Total', 400, 270, { align: 'center' })
-      .moveTo(50, 285).lineTo(550, 285).stroke();
+      // Add table headers
+      doc.moveDown().fillColor('#5F259F').fontSize(12)
+        .text('Article', 50, 270)
+        .text('Quantité', 100, 270, { align: 'center' })
+        .text('Prix', 250, 270, { align: 'center' })
+        .text('Total', 400, 270, { align: 'center' })
+        .moveTo(50, 285).lineTo(550, 285).stroke();
 
-    // Add items
-    let yPosition = 300;
-    invoice.items.forEach(item => {
-      doc.fillColor('black').fontSize(10)
-        .text(item.article, 50, yPosition)
-        .text(item.quantity, 100, yPosition, { align: 'center' })
-        .text(` ${item.price.toFixed(2)} ${invoice.currency.symbol}`, 250, yPosition, { align: 'center' } )
-        .text(` ${item.total.toFixed(2)} ${invoice.currency.symbol}`, 400, yPosition, { align: 'center' });
+      // Add items
+      let yPosition = 300;
+      invoice.items.forEach(item => {
+        doc.fillColor('black').fontSize(10)
+          .text(item.article, 50, yPosition)
+          .text(item.quantity, 100, yPosition, { align: 'center' })
+          .text(` ${item.price.toFixed(2)} ${invoice.currency.symbol}`, 250, yPosition, { align: 'center' })
+          .text(` ${item.total.toFixed(2)} ${invoice.currency.symbol}`, 400, yPosition, { align: 'center' });
 
-      yPosition += 20;
-    });
+        yPosition += 20;
+      });
 
-   // Add subtotal, tax, and total
-doc.fontSize(10).fillColor('black');
+      // Add subtotal, tax, and total
+      doc.fontSize(10).fillColor('black');
 
-// Subtotal
-doc.text('Sous-total :', 350, yPosition, { align: 'left' });
-doc.text(` ${invoice.subtotal.toFixed(2)} ${invoice.currency.symbol}`, 450, yPosition, { align: 'right' });
+      // Subtotal
+      doc.text('Sous-total :', 350, yPosition, { align: 'left' });
+      doc.text(` ${invoice.subtotal.toFixed(2)} ${invoice.currency.symbol}`, 450, yPosition, { align: 'right' });
 
-// Tax
-yPosition += 15; // Adjust yPosition to move down for the next line
-doc.text(`Tax ${invoice.tax.name} (${invoice.tax.value}%) :`, 350, yPosition, { align: 'left' });
-doc.text(` ${invoice.taxAmount.toFixed(2)} ${invoice.currency.symbol}`, 450, yPosition, { align: 'right' });
+      // Tax
+      yPosition += 15; // Adjust yPosition to move down for the next line
+      doc.text(`Tax ${invoice.tax.name} (${invoice.tax.value}%) :`, 350, yPosition, { align: 'left' });
+      doc.text(` ${invoice.taxAmount.toFixed(2)} ${invoice.currency.symbol}`, 450, yPosition, { align: 'right' });
 
-// Total
-yPosition += 15; // Adjust yPosition to move down for the next line
-doc.text('Total :', 350, yPosition, { align: 'left' });
-doc.text(` ${invoice.total.toFixed(2)} ${invoice.currency.symbol}`, 450, yPosition, { align: 'right' });
-    // Add footer
-    doc.moveDown().fontSize(10).fillColor('gray')
-      .text('Invoice was created on a computer and is valid without the signature and seal', 50, yPosition + 60, { align: 'center', width: 500 });
+      // Total
+      yPosition += 15; // Adjust yPosition to move down for the next line
+      doc.text('Total :', 350, yPosition, { align: 'left' });
+      doc.text(` ${invoice.total.toFixed(2)} ${invoice.currency.symbol}`, 450, yPosition, { align: 'right' });
 
-    // Finalize the PDF and end the stream
-    doc.end();
+      // Add footer
+      doc.moveDown().fontSize(10).fillColor('gray')
+        .text('Invoice was created on a computer and is valid without the signature and seal', 50, yPosition + 60, { align: 'center', width: 500 });
 
+      // Finalize the PDF and end the stream
+      doc.end();
+    }
   } catch (error) {
-    res.status(500).json({ message: 'Error generating PDF', error });
+    if (!res.headersSent) {
+      return res.status(500).json({ message: 'Error generating PDF', error });
+    }
   }
 };
+
+
+
+
+
+
+exports.generateMultipleInvoicesZip = async (req, res) => {
+  const { invoiceIds, createdBy } = req.query;
+
+  if (!invoiceIds || !createdBy) {
+    return res.status(400).json({ message: 'Missing required parameters' });
+  }
+
+  const invoiceIdsArray = invoiceIds.split(',');
+
+  try {
+    // Fetch company details using createdBy
+    const company = await Company.findOne({ createdBy });
+    if (!company) {
+      return res.status(404).json({ message: 'Company not found' });
+    }
+
+    // Create a zip archive
+    const archive = archiver('zip', { zlib: { level: 9 } });
+
+    // Set the response headers for the zip file
+    res.setHeader('Content-Disposition', 'attachment; filename=invoices.zip');
+    res.setHeader('Content-Type', 'application/zip');
+
+    // Pipe the archive into the response
+    archive.pipe(res);
+
+    // Loop through the provided invoice IDs and generate a PDF for each one
+    for (const id of invoiceIdsArray) {
+      const invoice = await Invoice.findById(id).populate('client').populate('currency').populate('tax');
+      if (!invoice) {
+        console.log(`Invoice not found: ${id}`);
+        continue;
+      }
+
+      // Create a new PDF document in memory
+      const doc = new PDFDocument({ margin: 50 });
+
+      // Set the file name dynamically based on the client's information
+      let filename = `invoice-${invoice.number}.pdf`;
+      if (invoice.client.person) {
+        filename = `invoice-${invoice.client.person.nom}-${invoice.client.person.prenom}-${invoice.number}.pdf`;
+      } else if (invoice.client.entreprise) {
+        filename = `invoice-${invoice.client.entreprise.nom}-${invoice.number}.pdf`;
+      }
+
+      // Append the PDF document to the zip archive
+      archive.append(doc, { name: filename });
+
+      // Generate the PDF content (the same format you provided)
+      doc.fontSize(20).text(company.name.toUpperCase(), 160, 57).moveDown();
+      doc.fontSize(10)
+        .text(company.address, 200, 65, { align: 'right' })
+        .text(company.state, 200, 80, { align: 'right' })
+        .text(company.country, 200, 95, { align: 'right' });
+
+      // Add invoice title
+      doc.fontSize(20).fillColor('#5F259F').text('Facture', 50, 160);
+
+      // Add invoice details
+      doc.fontSize(10).fillColor('black')
+        .text(`Date : ${invoice.date.toLocaleDateString()}`, 50, 200)
+        .text(`Numéro : # ${invoice.number}/${invoice.year}`, 50, 230)
+        .moveDown();
+
+      // Add client information
+      if (invoice.client.person) {
+        doc.text(`Nom du client : ${invoice.client.person.nom} ${invoice.client.person.prenom}`, 200, 220, { align: 'right' });
+      } else if (invoice.client.entreprise) {
+        doc.text(`Nom du client : ${invoice.client.entreprise.nom}`, 200, 220, { align: 'right' });
+      }
+
+      // Add table headers
+      doc.moveDown().fillColor('#5F259F').fontSize(12)
+        .text('Article', 50, 270)
+        .text('Quantité', 100, 270, { align: 'center' })
+        .text('Prix', 250, 270, { align: 'center' })
+        .text('Total', 400, 270, { align: 'center' })
+        .moveTo(50, 285).lineTo(550, 285).stroke();
+
+      // Add items
+      let yPosition = 300;
+      invoice.items.forEach(item => {
+        doc.fillColor('black').fontSize(10)
+          .text(item.article, 50, yPosition)
+          .text(item.quantity, 100, yPosition, { align: 'center' })
+          .text(` ${item.price.toFixed(2)} ${invoice.currency.symbol}`, 250, yPosition, { align: 'center' })
+          .text(` ${item.total.toFixed(2)} ${invoice.currency.symbol}`, 400, yPosition, { align: 'center' });
+        yPosition += 20;
+      });
+
+      // Add subtotal, tax, and total
+      doc.fontSize(10).fillColor('black');
+      doc.text('Sous-total :', 350, yPosition, { align: 'left' });
+      doc.text(` ${invoice.subtotal.toFixed(2)} ${invoice.currency.symbol}`, 450, yPosition, { align: 'right' });
+
+      yPosition += 15;
+      doc.text(`Tax ${invoice.tax.name} (${invoice.tax.value}%) :`, 350, yPosition, { align: 'left' });
+      doc.text(` ${invoice.taxAmount.toFixed(2)} ${invoice.currency.symbol}`, 450, yPosition, { align: 'right' });
+
+      yPosition += 15;
+      doc.text('Total :', 350, yPosition, { align: 'left' });
+      doc.text(` ${invoice.total.toFixed(2)} ${invoice.currency.symbol}`, 450, yPosition, { align: 'right' });
+
+      // Add footer
+      doc.moveDown().fontSize(10).fillColor('gray')
+        .text('Invoice was created on a computer and is valid without the signature and seal', 50, yPosition + 60, { align: 'center', width: 500 });
+
+      // Finalize the PDF and end the document stream
+      doc.end();
+    }
+
+    // Finalize the zip archive after adding all PDFs
+    archive.finalize();
+
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Error generating invoices', error });
+  }
+};
+
+
+
 
 
 

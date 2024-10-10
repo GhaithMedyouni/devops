@@ -109,6 +109,7 @@ const invoiceSchema = new mongoose.Schema({
     type: Date,
     default: Date.now,
   },
+  factureImage: { type: String } 
 });
 
 invoiceSchema.plugin(require('mongoose-autopopulate'));
