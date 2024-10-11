@@ -194,13 +194,39 @@ exports.convertProformaToFacture = async (req, res) => {
 exports.updateInvoice = async (req, res) => {
   try {
     const { id } = req.params;
-    const { number, year } = req.body; 
+    const { number, year } = req.body;
+    
+    // Check if an invoice with the same number and year exists, excluding the current one
     const existingInvoice = await Invoice.findOne({ number, year, _id: { $ne: id } });
     if (existingInvoice) {
       return res.status(400).json({ message: 'Invoice number already exists for this year.' });
     }
+
+    // Find the current invoice before updating
+    const invoice = await Invoice.findById(id);
+    if (!invoice) {
+      return res.status(404).json({ message: 'Invoice not found' });
+    }
+
+    // If a new factureImage is provided, handle file upload
+    if (req.file) {
+      const factureImagePath = path.join(__dirname, '../', invoice.factureImage);
+      
+      // Delete the old facture image if it exists
+      if (fs.existsSync(factureImagePath)) {
+        fs.unlinkSync(factureImagePath);
+      }
+      
+      // Save the new image path to the invoice data
+      req.body.factureImage = req.file.path;
+    }
+
+    // Update the invoice
     const updatedInvoice = await Invoice.findByIdAndUpdate(id, req.body, { new: true });
-    if (!updatedInvoice) return res.status(404).json({ message: 'Invoice not found' });
+    if (!updatedInvoice) {
+      return res.status(404).json({ message: 'Invoice not found' });
+    }
+
     res.status(200).json(updatedInvoice);
   } catch (error) {
     res.status(500).json({ message: 'Error updating invoice', error });
