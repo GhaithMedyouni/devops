@@ -226,7 +226,6 @@ exports.updateInvoice = async (req, res) => {
       if (fs.existsSync(factureImagePath)) {
         fs.unlinkSync(factureImagePath);
       }
-
       // Save the new image path to the invoice data
       req.body.factureImage = req.file.path;
     }
@@ -295,6 +294,7 @@ exports.updatePaymentStatus = async (req, res) => {
 // Function to generate an invoice PDF with dynamic company and invoice information
 
 exports.generateInvoicePDF = async (req, res) => {
+  
   const { id, createdBy } = req.params;
 
   try {
@@ -475,8 +475,113 @@ exports.generateInvoicePDF = async (req, res) => {
 
 
 
+// Helper function to generate a PDF for non-Proforma invoices
+const generatePDF = (invoice, company) => {
+  return new Promise((resolve, reject) => {
+    const doc = new PDFDocument({ margin: 50 });
+    const buffers = [];
 
+    doc.on('data', buffers.push.bind(buffers));
+    doc.on('end', () => resolve(Buffer.concat(buffers)));
 
+    // Add company information
+    doc.fontSize(20).text(company.name.toUpperCase(), 160, 57).moveDown();
+    doc.fontSize(10)
+      .text(company.address, 200, 65, { align: 'right' })
+      .text(company.state, 200, 80, { align: 'right' })
+      .text(company.country, 200, 95, { align: 'right' });
+
+    // Add invoice title
+    doc.fontSize(20).fillColor('#5F259F').text('Facture', 50, 160);
+
+    // Add invoice details
+    doc.fontSize(10).fillColor('black')
+      .text(`Date : ${invoice.date.toLocaleDateString()}`, 50, 200)
+      .text(`Numéro : # ${invoice.number}/${invoice.year}`, 50, 230)
+      .moveDown();
+
+    // Add client information
+    if (invoice.client.person) {
+      doc.text(`Nom du client : ${invoice.client.person.nom} ${invoice.client.person.prenom}`, 200, 220, { align: 'right' });
+    } else if (invoice.client.entreprise) {
+      doc.text(`Nom du client : ${invoice.client.entreprise.nom}`, 200, 220, { align: 'right' });
+    }
+
+    // Add table headers
+    doc.moveDown().fillColor('#5F259F').fontSize(12)
+      .text('Article', 50, 270)
+      .text('Quantité', 100, 270, { align: 'center' })
+      .text('Prix', 250, 270, { align: 'center' })
+      .text('Total', 400, 270, { align: 'center' })
+      .moveTo(50, 285).lineTo(550, 285).stroke();
+
+    // Add items
+    let yPosition = 300;
+    invoice.items.forEach(item => {
+      doc.fillColor('black').fontSize(10)
+        .text(item.article, 50, yPosition)
+        .text(item.quantity, 100, yPosition, { align: 'center' })
+        .text(` ${item.price.toFixed(2)} ${invoice.currency.symbol}`, 250, yPosition, { align: 'center' })
+        .text(` ${item.total.toFixed(2)} ${invoice.currency.symbol}`, 400, yPosition, { align: 'center' });
+      yPosition += 20;
+    });
+
+    // Add subtotal, tax, and total
+    doc.fontSize(10).fillColor('black');
+    doc.text('Sous-total :', 350, yPosition, { align: 'left' });
+    doc.text(` ${invoice.subtotal.toFixed(2)} ${invoice.currency.symbol}`, 450, yPosition, { align: 'right' });
+
+    yPosition += 15;
+    doc.text(`Tax ${invoice.tax.name} (${invoice.tax.value}%) :`, 350, yPosition, { align: 'left' });
+    doc.text(` ${invoice.taxAmount.toFixed(2)} ${invoice.currency.symbol}`, 450, yPosition, { align: 'right' });
+
+    yPosition += 15;
+    doc.text('Total :', 350, yPosition, { align: 'left' });
+    doc.text(` ${invoice.total.toFixed(2)} ${invoice.currency.symbol}`, 450, yPosition, { align: 'right' });
+
+    // Add footer
+    doc.moveDown().fontSize(10).fillColor('gray')
+      .text('Invoice was created on a computer and is valid without the signature and seal', 50, yPosition + 60, { align: 'center', width: 500 });
+
+    // Finalize the PDF and end the stream
+    doc.end();
+  });
+};
+
+// Helper function to handle Proforma invoices with factureImage
+const handleProformaInvoice = async (invoice) => {
+  const imagePath = path.join(__dirname, '../', invoice.factureImage);
+  return new Promise((resolve, reject) => {
+    if (fs.existsSync(imagePath)) {
+      const buffers = [];
+      const doc = new PDFDocument();
+
+      doc.on('data', buffers.push.bind(buffers));
+      doc.on('end', () => resolve(Buffer.concat(buffers)));
+
+      // If the factureImage is a PDF, embed it
+      if (path.extname(imagePath).toLowerCase() === '.pdf') {
+        const pdfBuffer = fs.readFileSync(imagePath);
+        doc.addPage({ buffer: pdfBuffer });
+      } else {
+        // If the factureImage is an image (e.g., JPG, PNG), embed it into a PDF
+        doc.image(imagePath, { fit: [500, 500], align: 'center', valign: 'center' });
+        doc.text(`Invoice Number: ${invoice.number}`, { align: 'center' });
+
+        if (invoice.client.person) {
+          doc.text(`Client: ${invoice.client.person.nom} ${invoice.client.person.prenom}`, { align: 'center' });
+        } else if (invoice.client.entreprise) {
+          doc.text(`Client: ${invoice.client.entreprise.nom}`, { align: 'center' });
+        }
+      }
+      doc.end();
+    } else {
+      reject(new Error('Facture image not found'));
+    }
+  });
+};
+
+// Main function to generate multiple invoices in a zip file
 exports.generateMultipleInvoicesZip = async (req, res) => {
   const { invoiceIds, createdBy } = req.query;
 
@@ -511,8 +616,15 @@ exports.generateMultipleInvoicesZip = async (req, res) => {
         continue;
       }
 
-      // Create a new PDF document in memory
-      const doc = new PDFDocument({ margin: 50 });
+      let pdfBuffer = null;
+
+      if (invoice.type === 'Proforma' && invoice.factureImage) {
+        // Handle Proforma invoice with factureImage
+        pdfBuffer = await handleProformaInvoice(invoice);
+      } else {
+        // Generate a PDF for non-Proforma invoices
+        pdfBuffer = await generatePDF(invoice, company);
+      }
 
       // Set the file name dynamically based on the client's information
       let filename = `invoice-${invoice.number}.pdf`;
@@ -522,70 +634,8 @@ exports.generateMultipleInvoicesZip = async (req, res) => {
         filename = `invoice-${invoice.client.entreprise.nom}-${invoice.number}.pdf`;
       }
 
-      // Append the PDF document to the zip archive
-      archive.append(doc, { name: filename });
-
-      // Generate the PDF content (the same format you provided)
-      doc.fontSize(20).text(company.name.toUpperCase(), 160, 57).moveDown();
-      doc.fontSize(10)
-        .text(company.address, 200, 65, { align: 'right' })
-        .text(company.state, 200, 80, { align: 'right' })
-        .text(company.country, 200, 95, { align: 'right' });
-
-      // Add invoice title
-      doc.fontSize(20).fillColor('#5F259F').text('Facture', 50, 160);
-
-      // Add invoice details
-      doc.fontSize(10).fillColor('black')
-        .text(`Date : ${invoice.date.toLocaleDateString()}`, 50, 200)
-        .text(`Numéro : # ${invoice.number}/${invoice.year}`, 50, 230)
-        .moveDown();
-
-      // Add client information
-      if (invoice.client.person) {
-        doc.text(`Nom du client : ${invoice.client.person.nom} ${invoice.client.person.prenom}`, 200, 220, { align: 'right' });
-      } else if (invoice.client.entreprise) {
-        doc.text(`Nom du client : ${invoice.client.entreprise.nom}`, 200, 220, { align: 'right' });
-      }
-
-      // Add table headers
-      doc.moveDown().fillColor('#5F259F').fontSize(12)
-        .text('Article', 50, 270)
-        .text('Quantité', 100, 270, { align: 'center' })
-        .text('Prix', 250, 270, { align: 'center' })
-        .text('Total', 400, 270, { align: 'center' })
-        .moveTo(50, 285).lineTo(550, 285).stroke();
-
-      // Add items
-      let yPosition = 300;
-      invoice.items.forEach(item => {
-        doc.fillColor('black').fontSize(10)
-          .text(item.article, 50, yPosition)
-          .text(item.quantity, 100, yPosition, { align: 'center' })
-          .text(` ${item.price.toFixed(2)} ${invoice.currency.symbol}`, 250, yPosition, { align: 'center' })
-          .text(` ${item.total.toFixed(2)} ${invoice.currency.symbol}`, 400, yPosition, { align: 'center' });
-        yPosition += 20;
-      });
-
-      // Add subtotal, tax, and total
-      doc.fontSize(10).fillColor('black');
-      doc.text('Sous-total :', 350, yPosition, { align: 'left' });
-      doc.text(` ${invoice.subtotal.toFixed(2)} ${invoice.currency.symbol}`, 450, yPosition, { align: 'right' });
-
-      yPosition += 15;
-      doc.text(`Tax ${invoice.tax.name} (${invoice.tax.value}%) :`, 350, yPosition, { align: 'left' });
-      doc.text(` ${invoice.taxAmount.toFixed(2)} ${invoice.currency.symbol}`, 450, yPosition, { align: 'right' });
-
-      yPosition += 15;
-      doc.text('Total :', 350, yPosition, { align: 'left' });
-      doc.text(` ${invoice.total.toFixed(2)} ${invoice.currency.symbol}`, 450, yPosition, { align: 'right' });
-
-      // Add footer
-      doc.moveDown().fontSize(10).fillColor('gray')
-        .text('Invoice was created on a computer and is valid without the signature and seal', 50, yPosition + 60, { align: 'center', width: 500 });
-
-      // Finalize the PDF and end the document stream
-      doc.end();
+      // Append the PDF buffer to the zip archive
+      archive.append(pdfBuffer, { name: filename });
     }
 
     // Finalize the zip archive after adding all PDFs
@@ -596,6 +646,7 @@ exports.generateMultipleInvoicesZip = async (req, res) => {
     res.status(500).json({ message: 'Error generating invoices', error });
   }
 };
+
 
 
 
