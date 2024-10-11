@@ -8,7 +8,7 @@ import "./style.css";
 const DisplayProformaInvoiceModal = ({ isOpen, toggle, proformaInvoice, refreshInvoices, userId }) => {
     const [loading, setLoading] = useState(false);
     const [isConverting, setIsConverting] = useState(false);
-    const [invoice, setInvoice] = useState(proformaInvoice); 
+    const [invoice, setInvoice] = useState(proformaInvoice);
 
     const getBadgeColor = (status) => {
         switch (status) {
@@ -108,68 +108,36 @@ const DisplayProformaInvoiceModal = ({ isOpen, toggle, proformaInvoice, refreshI
     return (
         <Modal isOpen={isOpen} toggle={toggle} size="lg">
             <ModalBody>
-                <div className="invoice-header">
-                    <h4>Facture reçus # {invoice.number}/{invoice.year}</h4>
-                    <div className="status-badges">
-                        <Badge color={getBadgeColor(invoice.status)}>{invoice.status}</Badge>
+                {/* Display the uploaded image in A4 size */}
+
+                {invoice.factureImage && (
+                    <div style={{
+                        width: '210mm',  // A4 width
+                        height: '297mm', // A4 height
+                        border: '1px solid #ddd', // Optional: adds a border to the A4 area
+                        padding: '10mm', // Optional: adds some padding
+                        boxShadow: '0 0 10px rgba(0, 0, 0, 0.1)', // Optional: adds a shadow
+                        overflow: 'hidden', // Prevent overflow
+                        position: 'relative', // For better positioning
+                        display: 'flex', // Flexbox for centering
+                        justifyContent: 'center', // Center horizontally
+                        alignItems: 'center' // Center vertically
+                    }}>
+                        <img 
+                            src={`http://localhost:5000/${invoice.factureImage}`} 
+                            alt={`Proforma Invoice Image`} 
+                            style={{ 
+                                maxWidth: '100%',  // Scale down the image if it's too large
+                                maxHeight: '100%', // Scale down the image if it's too large
+                                objectFit: 'contain' // Maintain aspect ratio
+                            }} 
+                        />
                     </div>
-                    <div className="amounts-summary">
-                        <div>Status: {invoice.status}</div>
-                        <div>Sous-total: {invoice.subtotal}</div>
-                        <div>Total: {invoice.total}</div>
-                    </div>
-                </div>
-
-                <div className="client-info">
-                    <p><strong>Client:</strong> {invoice.client.person.nom} {invoice.client.person.prenom}</p>
-                    <p><strong>Email:</strong> {invoice.client.person.email}</p>
-                    <p><strong>Téléphone:</strong> {invoice.client.person.telephone}</p>
-                </div>
-
-                <Table>
-                    <thead>
-                        <tr>
-                            <th>Produit</th>
-                            <th>Description</th>
-                            <th>Prix</th>
-                            <th>Quantité</th>
-                            <th>Total</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {invoice.items.map((item, index) => (
-                            <tr key={index}>
-                                <td>{item.article}</td>
-                                <td>{item.description}</td>
-                                <td>{item.price}</td>
-                                <td>{item.quantity}</td>
-                                <td>{item.total}</td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </Table>
-
-                <div className="totals-section">
-                    <p>Sous-total: {invoice.subtotal}</p>
-                    <p>Total des taxes ({invoice.tax.value}%): {invoice.taxAmount}</p>
-                    <p><strong>Total:</strong> {invoice.total}</p>
-                </div>
+                )}
 
                 <div className="action-buttons">
                     <Button color="secondary" onClick={toggle}>Fermer</Button>
-                    <Button color="info" onClick={handleDownloadPDF}>Télécharger PDF PDF</Button>
-                    
-                    
-
-                    <Button color="primary" onClick={handleSendEmail} disabled={loading}>
-                        {loading ? (
-                            <>
-                                <Spinner size="sm" /> Envoi...
-                            </>
-                        ) : (
-                            'Envoyer par Email'
-                        )}
-                    </Button>
+                    <Button color="info" onClick={handleDownloadPDF}>Télécharger PDF</Button>
                 </div>
             </ModalBody>
         </Modal>

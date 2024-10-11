@@ -34,6 +34,8 @@ const AddProformaInvoice = ({ isOpen, toggle, refreshInvoices, userId }) => {
     const [clientOptions, setClientOptions] = useState([]);
     const [currencyOptions, setCurrencyOptions] = useState([]);
     const [productOptions, setProductOptions] = useState([]);
+    const [factureImage, setFactureImage] = useState(null);
+
 
     useEffect(() => {
         const fetchTaxes = async () => {
@@ -137,52 +139,55 @@ const AddProformaInvoice = ({ isOpen, toggle, refreshInvoices, userId }) => {
 
     const handleSave = async () => {
         try {
-            const payload = {
-                ...invoice,
-                subtotal: calculateSubtotal(),
-                tax: selectedTax,
-                taxAmount: taxAmount,
-                total: invoiceTotal,
-                createdBy: userId
-            };
+            const formData = new FormData();
+            formData.append('client', invoice.client);
+            formData.append('number', invoice.number);
+            formData.append('year', invoice.year);
+            formData.append('currency', invoice.currency);
+            formData.append('status', invoice.status);
+            formData.append('date', invoice.date);
+            formData.append('note', invoice.note);
+            formData.append('type', invoice.type);
     
-            console.log("Payload being sent:", payload);
-    
-            await axios.post('http://localhost:5000/api/invoices', payload);
-            toast.success('Facture ajoutée avec succès', {
-                autoClose: 2000,
-                hideProgressBar: false,
-                closeOnClick: true,
-                pauseOnHover: true,
-                draggable: true,
-                progress: undefined,
+            // Append items to FormData
+            invoice.items.forEach((item, index) => {
+                formData.append(`items[${index}][article]`, item.article);
+                formData.append(`items[${index}][description]`, item.description);
+                formData.append(`items[${index}][quantity]`, item.quantity);
+                formData.append(`items[${index}][price]`, item.price);
+                formData.append(`items[${index}][total]`, item.total);
             });
+    
+            formData.append('subtotal', calculateSubtotal());
+            formData.append('tax', selectedTax);
+            formData.append('taxAmount', taxAmount);
+            formData.append('total', invoiceTotal);
+            formData.append('createdBy', userId);
+    
+            // Append the image file if it exists
+            if (factureImage) {
+                formData.append('factureImage', factureImage);
+            }
+    
+            await axios.post('http://localhost:5000/api/invoices', formData, {
+                headers: {
+                    'Content-Type': 'multipart/form-data'
+                }
+            });
+    
+            // Show success toast
+            toast.success("Invoice added successfully!");
+    
+            // Refresh the invoices list
             refreshInvoices();
             toggle();
-        } catch (error) {
-            console.error("Erreur lors de l'enregistrement de la facture:", error);
     
-            if (error.response && error.response.status === 400) {
-                toast.error('Le numéro de facture existe déjà. Veuillez utiliser un numéro unique.', {
-                    autoClose: 3000,
-                    hideProgressBar: false,
-                    closeOnClick: true,
-                    pauseOnHover: true,
-                    draggable: true,
-                    progress: undefined,
-                });
-            } else {
-                toast.error('Erreur lors de l\'enregistrement de la facture. Veuillez réessayer plus tard.', {
-                    autoClose: 3000,
-                    hideProgressBar: false,
-                    closeOnClick: true,
-                    pauseOnHover: true,
-                    draggable: true,
-                    progress: undefined,
-                });
-            }
+        } catch (error) {
+            console.error("Error saving invoice:", error);
+            toast.error("Error saving invoice. Please try again.");
         }
     };
+    
     const handleProductChange = (index, selectedOption) => {
         const newItems = [...invoice.items];
         newItems[index] = {
@@ -379,6 +384,20 @@ const AddProformaInvoice = ({ isOpen, toggle, refreshInvoices, userId }) => {
                 <Button color="primary" onClick={addItem}>Ajouter</Button>
                 <h5 className="mt-3"></h5>
                 <hr />
+                <Row form>
+                    <Col md={12}>
+                        <FormGroup>
+                            <Label for="invoiceImage">Upload Invoice Image</Label>
+                            <Input
+                                type="file"
+                                id="invoiceImage"
+                                onChange={(e) => setFactureImage(e.target.files[0])} // Store the selected file
+                                accept="image/jpeg,image/png,image/jpg"
+                            />
+                        </FormGroup>
+                    </Col>
+                </Row>
+
                 <Row>
                     <Col md={6}>
                         <FormGroup>

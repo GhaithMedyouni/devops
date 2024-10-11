@@ -35,7 +35,7 @@ app.use(
       secret: 'your_secret_key',
       resave: false,
       saveUninitialized: false,
-      store: MongoStore.create({ mongoUrl:process.env.MONGODB_URI_local}),
+      store: MongoStore.create({ mongoUrl:process.env.MONGODB_URI}),
     })
   );
 // Session setup

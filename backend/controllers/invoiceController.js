@@ -41,7 +41,7 @@ const fileFilter = (req, file, cb) => {
 
 exports.createInvoice = async (req, res) => {
   try {
-    const { client, number, year, currency, status, type, date, expirationDate, note, items, subtotal, tax, taxAmount, total, paidAmount, createdBy } = req.body;
+    const { client, number, year, currency, status, type, date, note, items, subtotal, tax, taxAmount, total, paidAmount, createdBy } = req.body;
 
     // Check if an invoice with the same number and year already exists
     const existingInvoice = await Invoice.findOne({ number, year });
@@ -62,9 +62,8 @@ exports.createInvoice = async (req, res) => {
       year,
       currency,
       status,
-      type,  // This will be either 'Standard' or 'Proforma'
+      type,
       date,
-      expirationDate,
       note,
       items,
       subtotal,
@@ -81,9 +80,11 @@ exports.createInvoice = async (req, res) => {
 
     res.status(201).json(newInvoice);
   } catch (error) {
-    res.status(500).json({ message: 'Error creating invoice', error });
+    console.error("Error creating invoice:", error); // Log error details
+    res.status(500).json({ message: 'Error creating invoice', error: error.message });
   }
 };
+
 
 // Expose the upload middleware with route handler
 
@@ -194,15 +195,51 @@ exports.convertProformaToFacture = async (req, res) => {
 exports.updateInvoice = async (req, res) => {
   try {
     const { id } = req.params;
-    const { number, year } = req.body; 
+    
+    // Log the received ID
+    console.log(`Received ID: ${id}`);
+
+    // Check if the provided ID is a valid MongoDB ObjectId
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: 'Invalid invoice ID format' });
+    }
+
+    const { number, year } = req.body;
+
+    // Check if an invoice with the same number and year exists, excluding the current one
     const existingInvoice = await Invoice.findOne({ number, year, _id: { $ne: id } });
     if (existingInvoice) {
       return res.status(400).json({ message: 'Invoice number already exists for this year.' });
     }
+
+    // Find the current invoice before updating
+    const invoice = await Invoice.findById(id);
+    if (!invoice) {
+      return res.status(404).json({ message: 'Invoice not found' });
+    }
+
+    // Handle file upload if a new factureImage is provided
+    if (req.file) {
+      const factureImagePath = path.join(__dirname, '../', invoice.factureImage);
+      
+      // Delete the old facture image if it exists
+      if (fs.existsSync(factureImagePath)) {
+        fs.unlinkSync(factureImagePath);
+      }
+
+      // Save the new image path to the invoice data
+      req.body.factureImage = req.file.path;
+    }
+
+    // Update the invoice
     const updatedInvoice = await Invoice.findByIdAndUpdate(id, req.body, { new: true });
-    if (!updatedInvoice) return res.status(404).json({ message: 'Invoice not found' });
+    if (!updatedInvoice) {
+      return res.status(404).json({ message: 'Invoice not found after update' });
+    }
+
     res.status(200).json(updatedInvoice);
   } catch (error) {
+    console.error("Error updating invoice: ", error);
     res.status(500).json({ message: 'Error updating invoice', error });
   }
 };
@@ -314,13 +351,7 @@ exports.generateInvoicePDF = async (req, res) => {
             valign: 'center',
           });
 
-          // Add some details (optional)
-          doc.text(`Invoice Number: ${invoice.number}`, { align: 'center' });
-          if (invoice.client.person) {
-            doc.text(`Client: ${invoice.client.person.nom} ${invoice.client.person.prenom}`, { align: 'center' });
-          } else if (invoice.client.entreprise) {
-            doc.text(`Client: ${invoice.client.entreprise.nom}`, { align: 'center' });
-          }
+       
 
           // Finalize the PDF and end the stream
           doc.end();
@@ -574,9 +605,7 @@ exports.generateMultipleInvoicesZip = async (req, res) => {
 //send invoice par email
 exports.generateInvoicePDFandSendEmail = async (req, res) => {
   const { id, createdBy } = req.params;
-console.log("generateInvoicePDFandSendEmail")
   try {
-    
     // Fetch company details using createdBy
     const company = await Company.findOne({ createdBy });
     if (!company) {
@@ -597,25 +626,25 @@ console.log("generateInvoicePDFandSendEmail")
       pdfFileName = `invoice-${invoice.client.entreprise.nom}-${invoice.number}.pdf`;
     }
     const pdfPath = path.join('Invoices', pdfFileName);
-console.log(pdfPath)
+    console.log('PDF Path:', pdfPath); // Log PDF path
+
     // Create a new PDF document and save it to the file system
     const doc = new PDFDocument({ margin: 50 });
     doc.pipe(fs.createWriteStream(pdfPath));
 
-    // Add the company logo
-    if (company.logo !== null) {
-      doc.image(company.logo, 50, 45, { width: 100 });
-    } else {
-      doc.text('Logo Placeholder', 50, 45, { width: 100 });
-    }
+    // // Add the company logo
+    // if (company.logo !== null) {
+    //   doc.image(company.logo, 50, 45, { width: 100 });
+    // } else {
+    //   doc.text('Logo Placeholder', 50, 45, { width: 100 });
+    // }
 
     // Add company information
     doc.fontSize(20).text(company.name.toUpperCase(), 160, 57).moveDown();
     doc.fontSize(10)
       .text(company.address, 200, 65, { align: 'right' })
       .text(company.state, 200, 80, { align: 'right' })
-      .text(company.country, 200, 95, { align: 'right' })
-     
+      .text(company.country, 200, 95, { align: 'right' });
 
     // Add invoice title
     doc.fontSize(20).fillColor('#5F259F').text('Facture', 50, 160);
@@ -628,7 +657,7 @@ console.log(pdfPath)
 
     doc.text(`Client type : ${invoice.client.type}`, 200, 200, { align: 'right' });
     if (invoice.client.person != null) {
-      doc.text(`Client Name : ${invoice.client.person.nom} ${invoice.client.person.prenom} `, 200, 220, { align: 'right' });
+      doc.text(`Client Name : ${invoice.client.person.nom} ${invoice.client.person.prenom}`, 200, 220, { align: 'right' });
     } else if (invoice.client.entreprise != null) {
       doc.text(`Client Name : ${invoice.client.entreprise.nom}`, 200, 220, { align: 'right' });
     }
@@ -679,17 +708,19 @@ console.log(pdfPath)
 
     // Wait until the PDF is saved, then send the email
     doc.on('finish', async () => {
-     
+      console.log('PDF finished writing. Sending email...');
+      await sendInvoiceByEmail(invoice, pdfPath, company.name, res);
+      // After sending the email, delete the PDF file from the server
+      fs.unlinkSync(pdfPath);
+      console.log('PDF file deleted after sending email');
     });
-    await sendInvoiceByEmail(invoice, pdfPath,company.name, res);
-    // After sending the email, delete the PDF file from the server
-    fs.unlinkSync(pdfPath);
-
 
   } catch (error) {
+    console.error('Error generating PDF and sending email:', error); // Log error
     res.status(500).json({ message: 'Error generating and sending PDF', error });
   }
 };
+
 
 
 async function sendInvoiceByEmail(invoice, pdfPath,companyName, res) {

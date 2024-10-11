@@ -57,6 +57,15 @@ const Invoices = () => {
     const [invoiceToPay, setInvoiceToPay] = useState(null);
     const [selectedType, setSelectedType] = useState('');
     const [selectedStatus, setSelectedStatus] = useState('');
+    const [selectedInvoices, setSelectedInvoices] = useState([]);
+    const [startDate, setStartDate] = useState('');
+    const [endDate, setEndDate] = useState('');
+    const [totalPaid, setTotalPaid] = useState(0);
+    const [totalUnPaid, setTotalUnPaid] = useState(0);
+
+
+
+
 
 
 
@@ -65,6 +74,18 @@ const Invoices = () => {
     const currentUserId = decodedToken.AdminID;
     const username = decodedToken.name;
     const userlastname = decodedToken.surname;
+
+    const calculateTotalPaid = (invoices) => {
+        return invoices
+            .filter(invoice => invoice.paymentStatus === "Payé" && invoice.type==="Standard")
+            .reduce((sum, invoice) => sum + invoice.total, 0);
+    };
+
+    const calculateTotalUnPaid = (invoices) => {
+        return invoices
+            .filter(invoice => invoice.paymentStatus === "impayé"&& invoice.type==="Standard")
+            .reduce((sum, invoice) => sum + invoice.total, 0);
+    };
 
     const fetchInvoices = async () => {
         try {
@@ -75,8 +96,25 @@ const Invoices = () => {
                 }
             });
 
-            setInvoices(response.data);
-            console.log(response.data);
+            const filteredInvoices = response.data.filter(invoice => {
+                const invoiceDate = new Date(invoice.date);
+                const start = new Date(startDate);
+                const end = new Date(endDate);
+
+                // Check if both startDate and endDate are selected
+                if (startDate && endDate) {
+                    return invoiceDate >= start && invoiceDate <= end;
+                }
+                // If no dates are selected, return all invoices
+                return true;
+            });
+
+            setInvoices(filteredInvoices);
+            setTotalPaid(calculateTotalPaid(filteredInvoices));
+            setTotalUnPaid(calculateTotalUnPaid(filteredInvoices));
+
+
+            console.log(filteredInvoices);
         } catch (error) {
             console.error("Error fetching invoices:", error);
         }
@@ -144,7 +182,14 @@ const Invoices = () => {
         fetchClients();
         fetchTaxes();
         fetchCurrencies();
-    }, []);
+    }, [startDate, endDate, selectedType, selectedStatus]);
+
+    useEffect(() => {
+        setTotalPaid(calculateTotalPaid(invoices));
+    }, [invoices]);
+    useEffect(() => {
+        setTotalUnPaid(calculateTotalUnPaid(invoices));
+    }, [invoices]);
 
     const handleSearchChange = (e) => {
         setSearchQuery(e.target.value);
@@ -178,16 +223,23 @@ const Invoices = () => {
     };
 
     const filteredInvoices = invoices.filter((invoice) => {
+        const isPersonClient = invoice?.client?.type === 'Person'; // Check if the client type is 'Person'
+        const isCompanyClient = invoice?.client?.type === 'Company'; // Check if the client type is 'Company'
+        
         return (
-            invoice?.type === 'Standard' &&
+            invoice?.type === 'Standard' && // Ensure invoice type is 'Standard'
             (
-                invoice?.client?.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                invoice?.number?.toString().includes(searchQuery) ||
-                invoice?.currency?.code?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                invoice?.status?.toLowerCase().includes(searchQuery.toLowerCase())
+                (isPersonClient && invoice?.client?.person.prenom?.toLowerCase().startsWith(searchQuery.toLowerCase())) || // For Person type, check if name starts with search query
+                (isPersonClient && invoice?.client?.person.nom?.toLowerCase().startsWith(searchQuery.toLowerCase())) || // For Person type, check if name starts with search query
+
+                (isCompanyClient && invoice?.client?.name?.toLowerCase().startsWith(searchQuery.toLowerCase())) || // For Company type, check if name starts with search query
+                invoice?.number?.toString().startsWith(searchQuery) // Check if invoice number starts with the search query
             )
         );
     });
+    
+    
+    
 
     const indexOfLastInvoice = currentPage * invoicesPerPage;
     const indexOfFirstInvoice = indexOfLastInvoice - invoicesPerPage;
@@ -272,11 +324,96 @@ const Invoices = () => {
             return 'Devise non trouvée';
         }
 
-       
+
         else {
             return currency.symbol;
         }
     };
+
+    const handleCheckboxChange = (invoiceId) => {
+        setSelectedInvoices((prevSelected) => {
+            // Check if the selected invoice exists in the previously selected invoices
+            const isSelected = prevSelected.some(invoice => invoice._id === invoiceId);
+
+            if (isSelected) {
+                // Deselect: filter out the selected invoice
+                return prevSelected.filter(invoice => invoice._id !== invoiceId);
+            } else {
+                // Select: find the invoice object and add it to selectedInvoices
+                const selectedInvoice = invoices.find(invoice => invoice._id === invoiceId);
+                return [...prevSelected, selectedInvoice]; // Add the entire invoice object
+            }
+        });
+    };
+
+    const handleGenerateZip = async () => {
+        // Log selected invoices before processing
+        console.log('Selected Invoices:', selectedInvoices);
+
+        // Ensure there are selected invoices
+        if (selectedInvoices.length === 0) {
+            console.error('No invoices selected');
+            return; // Exit the function
+        }
+
+        // Map to get the IDs and join them
+        const invoiceIds = selectedInvoices
+            .map(invoice => invoice._id)
+            .filter(id => id) // Ensure only valid IDs are included
+            .join(',');
+
+        // Log the generated invoiceIds
+        console.log('Generated invoiceIds:', invoiceIds);
+
+        // Ensure invoiceIds is not empty
+        if (!invoiceIds) {
+            console.error('No valid invoice IDs found');
+            return; // Exit the function
+        }
+
+        // Ensure createdBy is defined
+        const createdBy = currentUserId; // Replace with the actual user ID
+        if (!createdBy) {
+            console.error('CreatedBy is required');
+            return; // Exit the function
+        }
+
+        try {
+            const response = await axios.get(`http://localhost:5000/api/invoices/export-multi/pdf?invoiceIds=${invoiceIds}&createdBy=${createdBy}`, {
+                responseType: 'blob', // Important to specify that the response will be a blob
+            });
+
+            // Create a URL for the blob response
+            const url = window.URL.createObjectURL(new Blob([response.data]));
+
+            // Create a link element
+            const link = document.createElement('a');
+            link.href = url;
+            link.setAttribute('download', 'invoices.zip'); // Set the file name
+
+            // Append to the body and trigger the download
+            document.body.appendChild(link);
+            link.click();
+
+            // Cleanup
+            link.remove();
+            window.URL.revokeObjectURL(url);
+        } catch (error) {
+            console.error('Error generating ZIP file:', error);
+            // You can add error handling here, like showing a toast notification
+        }
+    };
+
+
+
+    const handleSelectAllChange = (e) => {
+        if (e.target.checked) {
+            setSelectedInvoices(filteredInvoices); // Select all filtered invoices
+        } else {
+            setSelectedInvoices([]); // Deselect all invoices
+        }
+    };
+    
 
     return (
         <>
@@ -289,6 +426,32 @@ const Invoices = () => {
                             <CardHeader className="border-0 d-flex justify-content-between align-items-center">
                                 <h3 className="mb-0">Liste des factures envoyées</h3>
                                 <div className="d-flex">
+                                    {/* Non-clickable buttons */}
+                                    <Button color="success" className="ml-2" disabled>
+                                        Total Payé: {totalPaid} {/* Display the sum here */}
+                                    </Button>
+
+                                    <Button color="danger" className="ml-2" disabled>
+                                    Total Impayé: {totalUnPaid}
+                                    </Button>
+                                </div>
+                                <div className="d-flex align-items-center">
+                                    {/* Date Filter */}
+                                    <Input
+                                        type="date"
+                                        placeholder="Date Début"
+                                        value={startDate}
+                                        onChange={(e) => setStartDate(e.target.value)}
+                                        className="mr-3"
+                                    />
+                                    <Input
+                                        type="date"
+                                        placeholder="Date Fin"
+                                        value={endDate}
+                                        onChange={(e) => setEndDate(e.target.value)}
+                                        className="mr-3"
+                                    />
+                                    {/* Search Input */}
                                     <Input
                                         type="text"
                                         placeholder="Search"
@@ -296,39 +459,57 @@ const Invoices = () => {
                                         onChange={handleSearchChange}
                                         className="mr-3"
                                     />
+                                    {/* Add Invoice Button */}
                                     <Button color="primary" onClick={toggleModal}>Ajouter facture</Button>
+
+                                    {selectedInvoices.length > 1 && (
+                                        <Button color="warning" className="ml-2" onClick={handleGenerateZip}>
+                                            Télécharger
+                                        </Button>
+                                    )}
                                 </div>
                             </CardHeader>
+
+
                             <div className="table-wrapper">
-                                <Table className="align-items-center table-flush" >
+                                <Table className="align-items-center table-flush">
                                     <thead className="thead-light">
                                         <tr>
+                                            <th scope="col"><div className="select-all-container" style={{ display: 'flex', alignItems: 'center', marginBottom: '10px' }}>
+                                                    <input
+                                                        type="checkbox"
+                                                        onChange={handleSelectAllChange}
+                                                        checked={selectedInvoices.length === filteredInvoices.length && filteredInvoices.length > 0}
+                                                    />
+                                                </div></th>
+                                           
                                             <th scope="col">Numéro de facture</th>
                                             <th scope="col">Client</th>
                                             <th scope="col">Date</th>
                                             <th scope="col">Total</th>
-                                            {/* <th scope="col">Payé</th> */}
                                             <th scope="col">Status</th>
                                             <th scope="col">paiement</th>
-
-                                            
                                             <th scope="col"></th>
+                                            <th scope="col"></th>
+
                                         </tr>
                                     </thead>
                                     <tbody>
                                         {currentInvoices.length > 0 ? (
                                             currentInvoices.map((invoice) => (
                                                 <tr key={invoice._id}>
+                                                    <td>
+                                                        <input
+                                                            type="checkbox"
+                                                            onChange={() => handleCheckboxChange(invoice._id)}
+                                                            checked={selectedInvoices.some(selected => selected._id === invoice._id)} // Check if the full invoice object is selected
+                                                        />
+                                                    </td>
+
                                                     <td>{invoice.number}</td>
                                                     <td>{getClientNameById(invoice.client._id)}</td>
                                                     <td>{new Date(invoice.date).toLocaleDateString()}</td>
-                                                   
-                                                    <td>
-                                                        {invoice.total }
-                                                    </td>
-
-
-                                                    {/* <td> {invoice.currency ? getCurrencySymbolById(invoice.currency._id, invoice.paidAmount) : 'Devise non trouvée'}</td> */}
+                                                    <td>{invoice.total}</td>
                                                     <td>
                                                         <Badge color={getStatusStyle(invoice.status)}>
                                                             {invoice.status}
@@ -339,9 +520,8 @@ const Invoices = () => {
                                                             {invoice.paymentStatus}
                                                         </Badge>
                                                     </td>
-                                                    
                                                     <td>
-                                                        <Dropdown isOpen={dropdownOpen === invoice._id} toggle={() => toggleDropdown(invoice._id)} >
+                                                        <Dropdown isOpen={dropdownOpen === invoice._id} toggle={() => toggleDropdown(invoice._id)}>
                                                             <DropdownToggle tag="span" data-toggle="dropdown" style={{ cursor: 'pointer' }}>
                                                                 <FontAwesomeIcon icon={faEllipsisH} style={{ fontSize: '1rem' }} />
                                                             </DropdownToggle>
@@ -361,10 +541,9 @@ const Invoices = () => {
                                                                 <DropdownItem onClick={() => handleSavePaymentClick(invoice)}>
                                                                     <span className="d-flex align-items-center">
                                                                         <i className="fa-solid fa-dollar-sign" style={{ fontSize: '1rem', marginRight: '10px' }}></i>
-                                                                       Enregister paiement
+                                                                        Enregister paiement
                                                                     </span>
                                                                 </DropdownItem>
-
                                                                 <DropdownItem divider />
                                                                 <DropdownItem onClick={() => handleDeleteClick(invoice._id)}>
                                                                     <span className="d-flex align-items-center">
@@ -375,7 +554,6 @@ const Invoices = () => {
                                                             </DropdownMenu>
                                                         </Dropdown>
                                                     </td>
-
                                                 </tr>
                                             ))
                                         ) : (
@@ -390,6 +568,7 @@ const Invoices = () => {
                                         )}
                                     </tbody>
                                 </Table>
+
                             </div>
                             <CardFooter className="py-4">
                                 <nav aria-label="...">

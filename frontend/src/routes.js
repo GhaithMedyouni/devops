@@ -81,7 +81,7 @@ const routes = [
 
   {
     path: "/invoices",
-    name: "Factures envoyées",
+    name: "Factures Ventes",
     icon: "fa-solid fa-file-invoice-dollar text-red",
     component: <Invoices />,
     layout: "/admin",
@@ -90,7 +90,7 @@ const routes = [
   },
   {
     path: "/proforma-invoice",
-    name: "Factures reçus",
+    name: "Factures Achats",
     icon: "fa-solid fa-file-invoice text-blue",
     component: <ProformaInvoice />,
     layout: "/admin",
@@ -98,15 +98,15 @@ const routes = [
     
   },
 
-  {
-    path: "/payment",
-    name: "Paiements",
-    icon: "fa-solid fa-credit-card text-yellow",
-    component: <Payment />,
-    layout: "/admin",
+  // {
+  //   path: "/payment",
+  //   name: "Paiements",
+  //   icon: "fa-solid fa-credit-card text-yellow",
+  //   component: <Payment />,
+  //   layout: "/admin",
 
     
-  },
+  // },
 
   {
     path: "/currencies",

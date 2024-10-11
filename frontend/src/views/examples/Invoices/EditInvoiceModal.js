@@ -36,6 +36,8 @@ const EditInvoiceModal = ({ isOpen, toggle, invoiceData, refreshInvoices, userId
     const [currencyOptions, setCurrencyOptions] = useState([]);
     const [statusOptions] = useState(['Brouillon', 'Envoyé', 'Annulé']);
     const [productOptions, setProductOptions] = useState([]);
+    const [factureImage, setFactureImage] = useState(null);
+
 
 
     useEffect(() => {
@@ -151,21 +153,66 @@ const EditInvoiceModal = ({ isOpen, toggle, invoiceData, refreshInvoices, userId
 
     const handleSave = async () => {
         try {
-            const payload = {
-                ...invoice,
-                subtotal: calculateSubtotal(),
-                tax: selectedTax,
-                taxAmount: taxAmount,
-                total: invoiceTotal,
-                createdBy: userId
-            };
-
-            let paymentStatus = invoice.paidAmount >= payload.total ? 'Payé' : 'impayé';
-
-            await axios.put(`http://localhost:5000/api/invoices/${invoice._id}`, payload);
-
+            // Log the invoice ID being sent
+            console.log(`Invoice ID being sent: ${invoice._id}`);
+    
+            const formData = new FormData();
+    
+            // Make sure to send only the client ObjectId
+            formData.append('client', invoice.client._id); // Use client._id instead of the whole object
+            formData.append('number', invoice.number);
+            formData.append('year', invoice.year);
+            formData.append('currency', invoice.currency._id);
+            formData.append('status', invoice.status);
+            formData.append('date', invoice.date);
+            formData.append('note', invoice.note);
+            formData.append('type', invoice.type);
+    
+            // Append items to FormData
+            invoice.items.forEach((item, index) => {
+                formData.append(`items[${index}][article]`, item.article);
+                formData.append(`items[${index}][description]`, item.description);
+                formData.append(`items[${index}][quantity]`, item.quantity);
+                formData.append(`items[${index}][price]`, item.price);
+                formData.append(`items[${index}][total]`, item.total);
+            });
+    
+            formData.append('subtotal', calculateSubtotal());
+    
+            // Log selected tax
+            console.log("Selected Tax:", selectedTax);
+    
+            // Append tax only if selectedTax is defined and has an _id
+            if (selectedTax && selectedTax._id) {
+                formData.append('tax', selectedTax._id);
+            } else {
+                console.warn("No valid tax ID found, skipping tax append.");
+                // Handle what to do if tax is not set
+            }
+    
+            formData.append('taxAmount', taxAmount);
+            formData.append('total', invoiceTotal);
+            formData.append('createdBy', userId);
+    
+            // Append the image file if it exists
+            if (factureImage) {
+                formData.append('factureImage', factureImage);
+            }
+    
+            // Determine payment status
+            let paymentStatus = invoice.paidAmount >= invoice.total ? 'Payé' : 'impayé';
+    
+            // Send the invoice data including the image (if provided)
+            await axios.put(`http://localhost:5000/api/invoices/invoices/${invoice._id}`, formData, {
+                headers: {
+                    'Content-Type': 'multipart/form-data',
+                    Authorization: `Bearer ${localStorage.getItem('token')}`
+                }
+            });
+    
+            // Update payment status if necessary
             if (paymentStatus === 'impayé') {
-                await axios.put(`http://localhost:5000/api/invoices/${invoice._id}`, {
+                await axios.put(`http://localhost:5000/api/invoices/invoices/${invoice._id}`, {
                     paymentStatus: paymentStatus
                 }, {
                     headers: {
@@ -173,7 +220,8 @@ const EditInvoiceModal = ({ isOpen, toggle, invoiceData, refreshInvoices, userId
                     }
                 });
             }
-
+    
+            // Show success toast
             toast.success('Facture mise à jour avec succès', {
                 autoClose: 2000,
                 hideProgressBar: false,
@@ -182,11 +230,12 @@ const EditInvoiceModal = ({ isOpen, toggle, invoiceData, refreshInvoices, userId
                 draggable: true,
                 progress: undefined,
             });
+    
             refreshInvoices();
             toggle();
         } catch (error) {
             console.error("Error updating invoice:", error);
-
+    
             if (error.response && error.response.status === 400) {
                 toast.error('Le numéro de facture existe déjà. Veuillez utiliser un numéro unique.', {
                     autoClose: 3000,
@@ -208,6 +257,9 @@ const EditInvoiceModal = ({ isOpen, toggle, invoiceData, refreshInvoices, userId
             }
         }
     };
+    
+
+
     const handleProductChange = (index, selectedOption) => {
         const newItems = [...invoice.items];
         newItems[index] = {
@@ -259,6 +311,7 @@ const EditInvoiceModal = ({ isOpen, toggle, invoiceData, refreshInvoices, userId
                                 <option value="">{invoice.client.type === 'Person'
                                     ? `${invoice.client.person.prenom} ${invoice.client.person.nom} `
                                     : `${invoice.client.entreprise}`}</option>
+
                                 {clientOptions.map((option) => (
                                     <option key={option.value} value={option.value}>
                                         {option.label}

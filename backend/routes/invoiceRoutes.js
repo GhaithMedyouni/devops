@@ -15,7 +15,7 @@ router.get('/:createdBy', invoiceController.getInvoices);
 router.post('/convert-to-facture/:id', invoiceController.convertProformaToFacture);
 
 // Update an existing invoice
-router.put('/:id', invoiceController.updateInvoice);
+router.put('/invoices/:id', invoiceController.uploadFac.single('factureImage'), invoiceController.updateInvoice);
 
 // Delete an invoice
 router.delete('/:id', invoiceController.deleteInvoice);
