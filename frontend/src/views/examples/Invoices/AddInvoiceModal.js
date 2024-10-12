@@ -43,7 +43,7 @@ const AddInvoiceModal = ({ isOpen, toggle, refreshInvoices, userId }) => {
                 });
                 setTaxOptions(response.data.map(tax => ({
                     value: tax._id,
-                    label: `${tax.name} - ${tax.value}%`
+                    label: `${tax.name} - ${tax.taxvalue}%`
                 })));
             } catch (error) {
                 console.error("Error fetching taxes:", error);

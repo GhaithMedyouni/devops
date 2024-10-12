@@ -515,7 +515,6 @@ const ProformaInvoice = () => {
                                                             checked={selectedInvoices.some(selected => selected._id === invoice._id)} // Check if the full invoice object is selected
                                                         />
                                                     </td>
-                                                    <td>{invoice.tax.value}</td>
                                                     <td>{invoice.number}</td>
                                                     <td>{getClientNameById(invoice.client._id)}</td>
                                                     <td>{new Date(invoice.date).toLocaleDateString()}</td>
