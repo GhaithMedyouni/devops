@@ -32,7 +32,7 @@ const EditProformaInvoiceModal = ({ isOpen, toggle, invoiceData, refreshInvoices
     const [invoiceTotal, setInvoiceTotal] = useState(0);
     const [clientOptions, setClientOptions] = useState([]);
     const [currencyOptions, setCurrencyOptions] = useState([]);
-    const [statusOptions] = useState(['Brouillon', 'Envoyé', 'Annulé', 'En attente', 'Accepté', 'Refusé']); 
+    const [statusOptions] = useState(['Brouillon', 'Envoyé', 'Annulé', 'En attente', 'Accepté', 'Refusé']);
     const [productOptions, setProductOptions] = useState([]);
     const [factureImage, setFactureImage] = useState(null);
 
@@ -84,7 +84,7 @@ const EditProformaInvoiceModal = ({ isOpen, toggle, invoiceData, refreshInvoices
         const fetchCurrencies = async () => {
             try {
                 const response = await axios.get('http://localhost:5000/api/currency', {
-                    params: { createdBy: userId  }
+                    params: { createdBy: userId }
                 });
                 setCurrencyOptions(response.data.map(currency => ({
                     value: currency._id,
@@ -146,6 +146,8 @@ const EditProformaInvoiceModal = ({ isOpen, toggle, invoiceData, refreshInvoices
         setInvoiceTotal(subtotal + calculatedTax);
     }, [invoice.items, selectedTax, taxOptions]);
 
+ 
+
     const handleSave = async () => {
         try {
             // Log the invoice ID being sent
@@ -192,16 +194,13 @@ const EditProformaInvoiceModal = ({ isOpen, toggle, invoiceData, refreshInvoices
             // Append the image file if it exists
             if (factureImage) {
                 formData.append('factureImage', factureImage);
-            } else {
-                console.warn("No image file provided, skipping image append.");
             }
-            
     
             // Determine payment status
             let paymentStatus = invoice.paidAmount >= invoice.total ? 'Payé' : 'impayé';
     
             // Send the invoice data including the image (if provided)
-            await axios.put(`http://localhost:5000/api/invoices/invoices/${invoice._id}`, formData, {
+            const response = await axios.put(`http://localhost:5000/api/invoices/invoices/${invoice._id}`, formData, {
                 headers: {
                     'Content-Type': 'multipart/form-data',
                     Authorization: `Bearer ${localStorage.getItem('token')}`
@@ -209,7 +208,7 @@ const EditProformaInvoiceModal = ({ isOpen, toggle, invoiceData, refreshInvoices
             });
     
             // Update payment status if necessary
-            if (paymentStatus === 'impayé') {
+            if (response.data.paidAmount !== invoice.paidAmount) {
                 await axios.put(`http://localhost:5000/api/invoices/invoices/${invoice._id}`, {
                     paymentStatus: paymentStatus
                 }, {
@@ -296,12 +295,16 @@ const EditProformaInvoiceModal = ({ isOpen, toggle, invoiceData, refreshInvoices
                                 type="select"
                                 name="client"
                                 id="client"
-                                value={invoice.client}
+                                value={invoice.client ? invoice.client._id : ''} // Assuming client._id is used as the value
                                 onChange={handleInputChange}
                             >
-                                <option value="">{invoice.client.type === 'Person'
-                                    ? `${invoice.client.person.prenom} ${invoice.client.person.nom} `
-                                    : `${invoice.client.entreprise}`}</option>
+                                <option value="">{
+                                    invoice.client ? (invoice.client.type === 'Person'
+                                        ? `${invoice.client.person.prenom} ${invoice.client.person.nom}`
+                                        : `${invoice.client.entreprise.nom}`)
+                                        : 'Select a client' // Default option if client is undefined
+                                }</option>
+
                                 {clientOptions.map((option) => (
                                     <option key={option.value} value={option.value}>
                                         {option.label}
@@ -364,7 +367,7 @@ const EditProformaInvoiceModal = ({ isOpen, toggle, invoiceData, refreshInvoices
                             </Input>
                         </FormGroup>
                     </Col>
-                    
+
                 </Row>
                 <Row form>
                     <Col md={12}>
@@ -386,7 +389,7 @@ const EditProformaInvoiceModal = ({ isOpen, toggle, invoiceData, refreshInvoices
                             </Input>
                         </FormGroup>
                     </Col>
-                   
+
                 </Row>
                 <FormGroup>
                     <Label for="note">Note</Label>

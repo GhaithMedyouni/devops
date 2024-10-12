@@ -15,6 +15,7 @@ import {
 import { toast } from 'react-toastify';
 
 const EditInvoiceModal = ({ isOpen, toggle, invoiceData, refreshInvoices, userId }) => {
+    console.log(invoiceData)
     const [invoice, setInvoice] = useState({
         client: '',
         number: 1,
@@ -155,9 +156,9 @@ const EditInvoiceModal = ({ isOpen, toggle, invoiceData, refreshInvoices, userId
         try {
             // Log the invoice ID being sent
             console.log(`Invoice ID being sent: ${invoice._id}`);
-    
+
             const formData = new FormData();
-    
+
             // Make sure to send only the client ObjectId
             formData.append('client', invoice.client._id); // Use client._id instead of the whole object
             formData.append('number', invoice.number);
@@ -167,7 +168,7 @@ const EditInvoiceModal = ({ isOpen, toggle, invoiceData, refreshInvoices, userId
             formData.append('date', invoice.date);
             formData.append('note', invoice.note);
             formData.append('type', invoice.type);
-    
+
             // Append items to FormData
             invoice.items.forEach((item, index) => {
                 formData.append(`items[${index}][article]`, item.article);
@@ -176,12 +177,12 @@ const EditInvoiceModal = ({ isOpen, toggle, invoiceData, refreshInvoices, userId
                 formData.append(`items[${index}][price]`, item.price);
                 formData.append(`items[${index}][total]`, item.total);
             });
-    
+
             formData.append('subtotal', calculateSubtotal());
-    
+
             // Log selected tax
             console.log("Selected Tax:", selectedTax);
-    
+
             // Append tax only if selectedTax is defined and has an _id
             if (selectedTax && selectedTax._id) {
                 formData.append('tax', selectedTax._id);
@@ -189,19 +190,19 @@ const EditInvoiceModal = ({ isOpen, toggle, invoiceData, refreshInvoices, userId
                 console.warn("No valid tax ID found, skipping tax append.");
                 // Handle what to do if tax is not set
             }
-    
+
             formData.append('taxAmount', taxAmount);
             formData.append('total', invoiceTotal);
             formData.append('createdBy', userId);
-    
+
             // Append the image file if it exists
             if (factureImage) {
                 formData.append('factureImage', factureImage);
             }
-    
+
             // Determine payment status
             let paymentStatus = invoice.paidAmount >= invoice.total ? 'Payé' : 'impayé';
-    
+
             // Send the invoice data including the image (if provided)
             await axios.put(`http://localhost:5000/api/invoices/invoices/${invoice._id}`, formData, {
                 headers: {
@@ -209,7 +210,7 @@ const EditInvoiceModal = ({ isOpen, toggle, invoiceData, refreshInvoices, userId
                     Authorization: `Bearer ${localStorage.getItem('token')}`
                 }
             });
-    
+
             // Update payment status if necessary
             if (paymentStatus === 'impayé') {
                 await axios.put(`http://localhost:5000/api/invoices/invoices/${invoice._id}`, {
@@ -220,7 +221,7 @@ const EditInvoiceModal = ({ isOpen, toggle, invoiceData, refreshInvoices, userId
                     }
                 });
             }
-    
+
             // Show success toast
             toast.success('Facture mise à jour avec succès', {
                 autoClose: 2000,
@@ -230,12 +231,12 @@ const EditInvoiceModal = ({ isOpen, toggle, invoiceData, refreshInvoices, userId
                 draggable: true,
                 progress: undefined,
             });
-    
+
             refreshInvoices();
             toggle();
         } catch (error) {
             console.error("Error updating invoice:", error);
-    
+
             if (error.response && error.response.status === 400) {
                 toast.error('Le numéro de facture existe déjà. Veuillez utiliser un numéro unique.', {
                     autoClose: 3000,
@@ -257,7 +258,7 @@ const EditInvoiceModal = ({ isOpen, toggle, invoiceData, refreshInvoices, userId
             }
         }
     };
-    
+
 
 
     const handleProductChange = (index, selectedOption) => {
@@ -305,12 +306,25 @@ const EditInvoiceModal = ({ isOpen, toggle, invoiceData, refreshInvoices, userId
                                 type="select"
                                 name="client"
                                 id="client"
-                                value={invoice.client} // This should match the selected client's value
-                                onChange={handleInputChange}
+                                value={invoice.client ? invoice.client._id : ''} // Use client ID here
+                                onChange={(e) => {
+                                    const selectedClient = clientOptions.find(option => option.value === e.target.value);
+                                    handleInputChange({
+                                        target: {
+                                            name: 'client',
+                                            value: selectedClient, // Set the selected client object
+                                        },
+                                    });
+                                    console.log("Selected client ID:", selectedClient ? selectedClient.value : null); // Log the selected client ID
+                                }}
                             >
-                                <option value="">{invoice.client.type === 'Person'
-                                    ? `${invoice.client.person.prenom} ${invoice.client.person.nom} `
-                                    : `${invoice.client.entreprise}`}</option>
+                                <option value="">
+                                    {invoice.client && invoice.client.type === 'Person'
+                                        ? `${invoice.client.person.prenom} ${invoice.client.person.nom}`
+                                        : invoice.client && invoice.client.entreprise.nom
+                                            ? invoice.client.entreprise.nom // Adjust according to your data structure
+                                            : 'Select a client'}
+                                </option>
 
                                 {clientOptions.map((option) => (
                                     <option key={option.value} value={option.value}>
@@ -320,6 +334,7 @@ const EditInvoiceModal = ({ isOpen, toggle, invoiceData, refreshInvoices, userId
                             </Input>
                         </FormGroup>
                     </Col>
+
 
 
                     <Col md={3}>

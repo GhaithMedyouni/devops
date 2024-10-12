@@ -17,6 +17,7 @@ import {
     PaginationLink,
     CardFooter,
     Badge,
+    Col,
 } from "reactstrap";
 import Header from "components/Headers/ElementHeader";
 import { toast, ToastContainer } from 'react-toastify';
@@ -62,6 +63,9 @@ const Invoices = () => {
     const [endDate, setEndDate] = useState('');
     const [totalPaid, setTotalPaid] = useState(0);
     const [totalUnPaid, setTotalUnPaid] = useState(0);
+    const [selectedCurrency, setSelectedCurrency] = useState(null);
+    const [currencyDropdownOpen, setCurrencyDropdownOpen] = useState(false);
+
 
 
 
@@ -77,13 +81,13 @@ const Invoices = () => {
 
     const calculateTotalPaid = (invoices) => {
         return invoices
-            .filter(invoice => invoice.paymentStatus === "Payé" && invoice.type==="Standard")
+            .filter(invoice => invoice.paymentStatus === "Payé" && invoice.type === "Standard")
             .reduce((sum, invoice) => sum + invoice.total, 0);
     };
 
     const calculateTotalUnPaid = (invoices) => {
         return invoices
-            .filter(invoice => invoice.paymentStatus === "impayé"&& invoice.type==="Standard")
+            .filter(invoice => invoice.paymentStatus === "impayé" && invoice.type === "Standard")
             .reduce((sum, invoice) => sum + invoice.total, 0);
     };
 
@@ -101,15 +105,16 @@ const Invoices = () => {
                 const start = new Date(startDate);
                 const end = new Date(endDate);
 
-                // Check if both startDate and endDate are selected
-                if (startDate && endDate) {
-                    return invoiceDate >= start && invoiceDate <= end;
-                }
-                // If no dates are selected, return all invoices
-                return true;
-            });
 
-            setInvoices(filteredInvoices);
+                const currencyMatches = invoice?.currency?._id === selectedCurrency?._id;
+                const dateInRange =
+                    (!startDate && !endDate) || // If no dates are selected, include all invoices
+                    (invoiceDate >= start && invoiceDate <= end); // Date range check
+
+                return currencyMatches && dateInRange;
+            });
+            const sortedInvoices = filteredInvoices.sort((a, b) => new Date(b.date) - new Date(a.date));
+            setInvoices(sortedInvoices);
             setTotalPaid(calculateTotalPaid(filteredInvoices));
             setTotalUnPaid(calculateTotalUnPaid(filteredInvoices));
 
@@ -182,7 +187,7 @@ const Invoices = () => {
         fetchClients();
         fetchTaxes();
         fetchCurrencies();
-    }, [startDate, endDate, selectedType, selectedStatus]);
+    }, [selectedCurrency, startDate, endDate, selectedType, selectedStatus]);
 
     useEffect(() => {
         setTotalPaid(calculateTotalPaid(invoices));
@@ -225,7 +230,7 @@ const Invoices = () => {
     const filteredInvoices = invoices.filter((invoice) => {
         const isPersonClient = invoice?.client?.type === 'Person'; // Check if the client type is 'Person'
         const isCompanyClient = invoice?.client?.type === 'Company'; // Check if the client type is 'Company'
-        
+
         return (
             invoice?.type === 'Standard' && // Ensure invoice type is 'Standard'
             (
@@ -237,9 +242,9 @@ const Invoices = () => {
             )
         );
     });
-    
-    
-    
+
+
+
 
     const indexOfLastInvoice = currentPage * invoicesPerPage;
     const indexOfFirstInvoice = indexOfLastInvoice - invoicesPerPage;
@@ -413,26 +418,50 @@ const Invoices = () => {
             setSelectedInvoices([]); // Deselect all invoices
         }
     };
-    
+
+    const handleCurrencySelect = (currency) => {
+        setSelectedCurrency(currency);
+    };
+    const toggleCurrencyDropdown = () => setCurrencyDropdownOpen(!currencyDropdownOpen);
 
     return (
         <>
             <ToastContainer />
             <Header />
+
             <Container className="mt--7" fluid >
+                <Row className="mb-4">
+                    <Col lg="12" className="mb-4 d-flex justify-content-end">
+                        <Dropdown
+                            isOpen={currencyDropdownOpen}
+                            toggle={toggleCurrencyDropdown}
+                        >
+                            <DropdownToggle caret>
+                                {selectedCurrency ? selectedCurrency.name : "Select Devise"}
+                            </DropdownToggle>
+                            <DropdownMenu>
+                                {currencies.map(currency => (
+                                    <DropdownItem key={currency._id} onClick={() => handleCurrencySelect(currency)}>
+                                        {currency.name}
+                                    </DropdownItem>
+                                ))}
+                            </DropdownMenu>
+                        </Dropdown>
+                    </Col>
+                </Row>
                 <Row>
                     <div className="col">
                         <Card className="shadow" >
                             <CardHeader className="border-0 d-flex justify-content-between align-items-center">
-                                <h3 className="mb-0">Liste des factures envoyées</h3>
+                                <h3 className="mb-0">Liste des factures Achats</h3>
                                 <div className="d-flex">
                                     {/* Non-clickable buttons */}
                                     <Button color="success" className="ml-2" disabled>
-                                        Total Payé: {totalPaid} {/* Display the sum here */}
+                                        Total Payé: {totalPaid.toFixed(3)} {/* Display the sum here */}
                                     </Button>
 
                                     <Button color="danger" className="ml-2" disabled>
-                                    Total Impayé: {totalUnPaid}
+                                        Total Impayé: {totalUnPaid.toFixed(3)}
                                     </Button>
                                 </div>
                                 <div className="d-flex align-items-center">
@@ -476,13 +505,13 @@ const Invoices = () => {
                                     <thead className="thead-light">
                                         <tr>
                                             <th scope="col"><div className="select-all-container" style={{ display: 'flex', alignItems: 'center', marginBottom: '10px' }}>
-                                                    <input
-                                                        type="checkbox"
-                                                        onChange={handleSelectAllChange}
-                                                        checked={selectedInvoices.length === filteredInvoices.length && filteredInvoices.length > 0}
-                                                    />
-                                                </div></th>
-                                           
+                                                <input
+                                                    type="checkbox"
+                                                    onChange={handleSelectAllChange}
+                                                    checked={selectedInvoices.length === filteredInvoices.length && filteredInvoices.length > 0}
+                                                />
+                                            </div></th>
+
                                             <th scope="col">Numéro de facture</th>
                                             <th scope="col">Client</th>
                                             <th scope="col">Date</th>

@@ -65,9 +65,10 @@ const DisplayInvoiceModal = ({ isOpen, toggle, invoice,refreshInvoices }) => {
     const handleSendEmail = async () => {
         setLoading(true); 
         console.log('Sending invoice via email...');
-    
+        
         try {
             const response = await axios.get(`http://localhost:5000/api/invoices/export-pdf/send-email/${invoice._id}/${invoice.createdBy}`);
+            
             if (response.status === 200) {
                 await axios.put(`http://localhost:5000/api/invoices/${invoice._id}`, {
                     status: 'Envoyé'
@@ -79,7 +80,6 @@ const DisplayInvoiceModal = ({ isOpen, toggle, invoice,refreshInvoices }) => {
     
                 toast.success('Invoice sent via email successfully.');
                 refreshInvoices();  
-    
             } else {
                 toast.error('Failed to send the invoice. Please try again.');
             }
@@ -87,9 +87,10 @@ const DisplayInvoiceModal = ({ isOpen, toggle, invoice,refreshInvoices }) => {
             console.error('Error sending invoice via email:', error);
             toast.error('Error sending invoice via email. Please try again.');
         } finally {
-            setLoading(false); 
+            setLoading(false); // Ensure loading state is reset in finally block
         }
     };
+    
     
 
     return (
@@ -145,7 +146,7 @@ const DisplayInvoiceModal = ({ isOpen, toggle, invoice,refreshInvoices }) => {
 
                 <div className="totals-section">
                     <p>Sous-total: {invoice.subtotal}</p>
-                    <p>Total des taxes ({invoice.tax.value}%): {invoice.taxAmount}</p>
+                    <p>Total des taxes : {invoice.taxAmount}</p>
                     <p><strong>Total:</strong> {invoice.total}</p>
                 </div>
 

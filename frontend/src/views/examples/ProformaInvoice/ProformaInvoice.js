@@ -17,6 +17,7 @@ import {
     PaginationLink,
     CardFooter,
     Badge,
+    Col,
 } from "reactstrap";
 import Header from "components/Headers/ElementHeader";
 import { toast, ToastContainer } from 'react-toastify';
@@ -62,6 +63,8 @@ const ProformaInvoice = () => {
     const [totalUnPaid, setTotalUnPaid] = useState(0);
     const [selectedType, setSelectedType] = useState('');
     const [selectedStatus, setSelectedStatus] = useState('');
+    const [selectedCurrency, setSelectedCurrency] = useState(null);
+    const [currencyDropdownOpen, setCurrencyDropdownOpen] = useState(false);
 
     const token = localStorage.getItem('token');
     const decodedToken = token ? decodeToken(token) : {};
@@ -95,19 +98,21 @@ const ProformaInvoice = () => {
                 const end = new Date(endDate);
 
                 // Check if both startDate and endDate are selected
-                if (startDate && endDate) {
-                    return invoiceDate >= start && invoiceDate <= end;
-                }
-                // If no dates are selected, return all invoices
-                return true;
+                const currencyMatches = invoice?.currency?._id === selectedCurrency?._id;
+                const dateInRange =
+                    (!startDate && !endDate) || // If no dates are selected, include all invoices
+                    (invoiceDate >= start && invoiceDate <= end); // Date range check
+
+                return currencyMatches && dateInRange;
             });
 
             const filtre = response.data.filter(invoice => {
                 // Filter for only 'Proforma' invoices
                 return invoice.type === 'Proforma';
             });
+            const sortedInvoices = filteredInvoices.sort((a, b) => new Date(b.date) - new Date(a.date));
 
-            setInvoices(filteredInvoices);
+            setInvoices(sortedInvoices);
             setTotalPaid(calculateTotalPaid(filtre));
             setTotalUnPaid(calculateTotalUnPaid(filtre));
 
@@ -173,7 +178,7 @@ const ProformaInvoice = () => {
         fetchClients();
         fetchTaxes();
         fetchCurrencies();
-    }, [startDate, endDate, selectedType, selectedStatus]);
+    }, [selectedCurrency, startDate, endDate, selectedType, selectedStatus]);
     useEffect(() => {
         setTotalPaid(calculateTotalPaid(invoices));
     }, [invoices]);
@@ -394,12 +399,34 @@ const ProformaInvoice = () => {
             setSelectedInvoices([]); // Deselect all invoices
         }
     };
-
+    const handleCurrencySelect = (currency) => {
+        setSelectedCurrency(currency);
+    };
+    const toggleCurrencyDropdown = () => setCurrencyDropdownOpen(!currencyDropdownOpen);
     return (
         <>
             <ToastContainer />
             <Header />
             <Container className="mt--7" fluid>
+                <Row className="mb-4">
+                    <Col lg="12" className="mb-4 d-flex justify-content-end">
+                        <Dropdown
+                            isOpen={currencyDropdownOpen}
+                            toggle={toggleCurrencyDropdown}
+                        >
+                            <DropdownToggle caret>
+                                {selectedCurrency ? selectedCurrency.name : "Select Devise"}
+                            </DropdownToggle>
+                            <DropdownMenu>
+                                {currencies.map(currency => (
+                                    <DropdownItem key={currency._id} onClick={() => handleCurrencySelect(currency)}>
+                                        {currency.name}
+                                    </DropdownItem>
+                                ))}
+                            </DropdownMenu>
+                        </Dropdown>
+                    </Col>
+                </Row>
                 <Row>
                     <div className="col">
                         <Card className="shadow">

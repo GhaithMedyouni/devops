@@ -114,14 +114,11 @@ const DisplayProformaInvoiceModal = ({ isOpen, toggle, proformaInvoice, refreshI
                     <div style={{
                         width: '210mm',  // A4 width
                         height: '297mm', // A4 height
-                        border: '1px solid #ddd', // Optional: adds a border to the A4 area
                         padding: '10mm', // Optional: adds some padding
-                        boxShadow: '0 0 10px rgba(0, 0, 0, 0.1)', // Optional: adds a shadow
                         overflow: 'hidden', // Prevent overflow
                         position: 'relative', // For better positioning
                         display: 'flex', // Flexbox for centering
-                        justifyContent: 'center', // Center horizontally
-                        alignItems: 'center' // Center vertically
+                       
                     }}>
                         <img 
                             src={`http://localhost:5000/${invoice.factureImage}`} 
