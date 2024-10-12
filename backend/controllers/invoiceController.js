@@ -220,14 +220,8 @@ exports.updateInvoice = async (req, res) => {
 
     // Handle file upload if a new factureImage is provided
     if (req.file) {
-      const factureImagePath = path.join(__dirname, '../', invoice.factureImage);
-      
-      // Delete the old facture image if it exists
-      if (fs.existsSync(factureImagePath)) {
-        fs.unlinkSync(factureImagePath);
-      }
-      // Save the new image path to the invoice data
       req.body.factureImage = req.file.path;
+      // Save the new image path to the invoice data
     }
 
     // Update the invoice
