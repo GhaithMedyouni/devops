@@ -158,7 +158,10 @@ const EditInvoiceModal = ({ isOpen, toggle, invoiceData, refreshInvoices, userId
 
     useEffect(() => {
         const subtotal = calculateSubtotal();
+        setSelectedTax(invoiceData.tax)
+
         const selectedTaxOption = taxOptions.find(tax => tax.value === selectedTax);
+        console.log(selectedTax)
         const calculatedTax = selectedTaxOption ? (subtotal * parseFloat(selectedTaxOption.label.split(' - ')[1])) / 100 : 0;
         setTaxAmount(calculatedTax);
         setInvoiceTotal(subtotal + calculatedTax);
@@ -512,6 +515,7 @@ const EditInvoiceModal = ({ isOpen, toggle, invoiceData, refreshInvoices, userId
                                 name="tax"
                                 id="tax"
                                 value={selectedTax ? selectedTax : ''} // Ensure selectedTax is correctly set
+                                
                                 onChange={handleTaxChange}
                             >
                                 <option value="">Select Tax</option>
