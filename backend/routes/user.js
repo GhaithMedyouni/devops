@@ -30,20 +30,20 @@ router.post('/register',async (req,res)=>{
 
       const token = jwt.sign({ email: newuser.email }, process.env.JWT_SECRET, { expiresIn: '1d' });
       const transporter = nodemailer.createTransport({
-        service: process.env.SERVICE,
+        host: process.env.HOST_MAILER,
         port: process.env.PORT_MAILER,
-        secure: process.env.SECURE,
+        secure: process.env.SECURE_MAILER === 'true', // Use environment variable to control secure flag
         auth: {
-            user: process.env.USER_MAILER, // Your Gmail email address
-            pass: process.env.PASS_MAILER // Your Gmail password
+          user: process.env.USER_MAILER,
+          pass: process.env.PASS_MAILER,
         },
-        tls:{
-            rejectUnauthorized:false
-        }
-    });
+        tls: {
+          rejectUnauthorized: false, // Allow unauthorized certs (optional, should be used cautiously)
+        },
+      });
 
     const mailOptions = {
-        from: 'LAST RESERVATION',
+        from: process.env.USER_MAILER,
         to: req.body.email, // User's email address
         subject: 'Confirmation Email',
         text: 'Thank you for registering. Your account has been successfully created.',

@@ -23,20 +23,20 @@ exports.register = async (req, res) => {
         const token = jwt.sign({ email: newAdmin.email }, process.env.JWT_SECRET, { expiresIn: '1d' });
 
         const transporter = nodemailer.createTransport({
-            service: process.env.SERVICE,
-            port: process.env.PORT_MAILER,
-            secure: process.env.SECURE,
-            auth: {
-                user: process.env.USER_MAILER,
-                pass: process.env.PASS_MAILER
-            },
-            tls: {
-                rejectUnauthorized: false
-            }
+          host: process.env.HOST_MAILER,
+          port: process.env.PORT_MAILER,
+          secure: process.env.SECURE_MAILER === 'true', // Use environment variable to control secure flag
+          auth: {
+            user: process.env.USER_MAILER,
+            pass: process.env.PASS_MAILER,
+          },
+          tls: {
+            rejectUnauthorized: false, // Allow unauthorized certs (optional, should be used cautiously)
+          },
         });
 
         const mailOptions = {
-            from: 'YOUR SERVICE NAME',
+            from: process.env.USER_MAILER,
             to: req.body.email,
             subject: 'Confirmation Email',
             text: 'Thank you for registering. Your account has been successfully created.',
@@ -126,19 +126,19 @@ exports.login =async (req, res) => {
     await user.save();
   
     const transporter = nodemailer.createTransport({
-        service: process.env.SERVICE,
-            port: process.env.PORT_MAILER,
-            secure: process.env.SECURE,
-            auth: {
-                user: process.env.USER_MAILER,
-                pass: process.env.PASS_MAILER
-            },
-            tls: {
-                rejectUnauthorized: false
-            }
+      host: process.env.HOST_MAILER,
+      port: process.env.PORT_MAILER,
+      secure: process.env.SECURE_MAILER === 'true', // Use environment variable to control secure flag
+      auth: {
+        user: process.env.USER_MAILER,
+        pass: process.env.PASS_MAILER,
+      },
+      tls: {
+        rejectUnauthorized: false, // Allow unauthorized certs (optional, should be used cautiously)
+      },
     });
     const mailOptions = {
-        from: 'reset password',
+        from:process.env.USER_MAILER,
         to: user.email,
         subject: 'Password Reset OTP',
         text: `Your OTP for password reset is: ${otp}`,

@@ -752,13 +752,11 @@ exports.generateInvoicePDFandSendEmail = async (req, res) => {
     doc.end();
 
     // Wait until the PDF is saved, then send the email
-    doc.on('finish', async () => {
-      console.log('PDF finished writing. Sending email...');
-      await sendInvoiceByEmail(invoice, pdfPath, company.name, res);
-      // After sending the email, delete the PDF file from the server
-      fs.unlinkSync(pdfPath);
-      console.log('PDF file deleted after sending email');
-    });
+    await sendInvoiceByEmail(invoice, pdfPath,company.name, res);
+    // After sending the email, delete the PDF file from the server
+    fs.unlinkSync(pdfPath);
+
+
 
   } catch (error) {
     console.error('Error generating PDF and sending email:', error); // Log error
@@ -768,60 +766,86 @@ exports.generateInvoicePDFandSendEmail = async (req, res) => {
 
 
 
-async function sendInvoiceByEmail(invoice, pdfPath,companyName, res) {
-  console.log("sendinvoice")
+async function sendInvoiceByEmail(invoice, pdfPath, companyName, res) {
+  console.log('Starting to send invoice via email...');
+
   try {
+    // Ensure the PDF path is valid
+    if (!pdfPath || !path.basename(pdfPath)) {
+      console.error('Invalid PDF path');
+      return res.status(400).json({ message: 'Invalid PDF path' });
+    }
+
     // Set up Nodemailer transporter
     const transporter = nodemailer.createTransport({
-      service: process.env.SERVICE,
+      host: process.env.HOST_MAILER,
       port: process.env.PORT_MAILER,
-      secure: process.env.SECURE === 'true',
+      secure: process.env.SECURE_MAILER === 'true', // Use environment variable to control secure flag
       auth: {
-          user: process.env.USER_MAILER,
-          pass: process.env.PASS_MAILER
+        user: process.env.USER_MAILER,
+        pass: process.env.PASS_MAILER,
       },
       tls: {
-          rejectUnauthorized: false
-      }
-  });
+        rejectUnauthorized: false, // Allow unauthorized certs (optional, should be used cautiously)
+      },
+    });
 
     // Determine the email recipient
-   
-    if (invoice.client.person != null) {
-       recipientEmail = invoice.client.person.email;
-       recipientName = invoice.client.person.nom;
-    } else if (invoice.client.entreprise != null) {
-       recipientEmail = invoice.client.entreprise.email;
-       recipientName = invoice.client.entreprise.nom;
+    let recipientEmail, recipientName;
+    if (invoice.client && invoice.client.person) {
+      recipientEmail = invoice.client.person.email;
+      recipientName = invoice.client.person.nom;
+    } else if (invoice.client && invoice.client.entreprise) {
+      recipientEmail = invoice.client.entreprise.email;
+      recipientName = invoice.client.entreprise.nom;
     }
-console.log(recipientEmail)
-console.log(recipientName)
+
+    if (!recipientEmail) {
+      console.error('No recipient email found');
+      return res.status(400).json({ message: 'No recipient email found' });
+    }
+
+    console.log(`Sending email to: ${recipientEmail}`);
+
     // Email content
-    let mailOptions = {
-      from: 'TreeFacture', // Sender address
-      to: recipientEmail, // Receiver's email address
-      subject: `Invoice #${invoice.number}/${invoice.year} from Your Company`,
+    const mailOptions = {
+      from: process.env.USER_MAILER,
+      to: recipientEmail,
+      subject: `Invoice #${invoice.number}/${invoice.year} from ${companyName}`,
       text: `Dear ${recipientName},\n\nPlease find attached your invoice.\n\nTotal Amount: ${invoice.currency.symbol}${invoice.total.toFixed(2)}\n\nThank you for your business.\n\nBest Regards,\n${companyName}`,
       attachments: [
         {
-          filename: path.basename(pdfPath), // Use the PDF file name
-          path: pdfPath, // The path to the PDF file
+          filename: path.basename(pdfPath),
+          path: pdfPath,
         },
       ],
     };
 
     // Send the email
-    await transporter.sendMail(mailOptions);
+    const info = await transporter.sendMail(mailOptions);
+    console.log(`Email sent successfully: ${info.response}`);
 
     // Update invoice status to "Envoyé"
     invoice.status = 'Envoyé';
     await invoice.save();
+    console.log('Invoice status updated to "Envoyé"');
 
     // Respond to the API call
-    res.status(200).json({ message: 'Invoice generated and sent via email successfully' });
-
+    return res.status(200).json({ message: 'Invoice generated and sent via email successfully' });
   } catch (error) {
     console.error('Error sending email:', error);
-    res.status(500).json({ message: 'Failed to send email', error });
+
+    // Specific error responses for better debugging
+    if (error.responseCode) {
+      console.error('SMTP response error code:', error.responseCode);
+    }
+
+    return res.status(500).json({ message: 'Failed to send email', error: error.message });
   }
 }
+
+
+
+
+
+
