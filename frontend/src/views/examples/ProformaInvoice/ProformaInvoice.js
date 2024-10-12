@@ -431,15 +431,15 @@ const ProformaInvoice = () => {
                     <div className="col">
                         <Card className="shadow">
                             <CardHeader className="border-0 d-flex justify-content-between align-items-center">
-                                <h3 className="mb-0">Liste des factures reçus</h3>
+                                <h3 className="mb-0">Liste des factures Achats</h3>
                                 <div className="d-flex">
                                     {/* Non-clickable buttons */}
                                     <Button color="success" className="ml-2" disabled>
-                                        Total Payé: {totalPaid} {/* Display the sum here */}
+                                        Total Payé: {totalPaid.toFixed(3)} {/* Display the sum here */}
                                     </Button>
 
                                     <Button color="danger" className="ml-2" disabled>
-                                        Total Impayé: {totalUnPaid}
+                                        Total Impayé: {totalUnPaid.toFixed(3)}
                                     </Button>
                                 </div>
                                 <div className="d-flex">
@@ -487,6 +487,7 @@ const ProformaInvoice = () => {
                                                     />
                                                 </div>
                                             </th>
+                                            <th>taxe</th>
                                             <th scope="col">Numéro de facture</th>
                                             <th scope="col">Client</th>
                                             <th scope="col">Date</th>
@@ -514,6 +515,7 @@ const ProformaInvoice = () => {
                                                             checked={selectedInvoices.some(selected => selected._id === invoice._id)} // Check if the full invoice object is selected
                                                         />
                                                     </td>
+                                                    <td>{invoice.tax.value}</td>
                                                     <td>{invoice.number}</td>
                                                     <td>{getClientNameById(invoice.client._id)}</td>
                                                     <td>{new Date(invoice.date).toLocaleDateString()}</td>

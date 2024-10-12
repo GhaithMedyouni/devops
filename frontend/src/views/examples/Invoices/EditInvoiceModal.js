@@ -26,11 +26,16 @@ const EditInvoiceModal = ({ isOpen, toggle, invoiceData, refreshInvoices, userId
         note: '',
         items: [{ article: '', description: '', quantity: 1, price: 0, total: 0 }],
         paidAmount: 0,
+        tax: invoiceData ? invoiceData.tax : {},
     });
 
 
     const [taxOptions, setTaxOptions] = useState([]);
     const [selectedTax, setSelectedTax] = useState('');
+    const [selectedClient, setSelectedClient] = useState('');
+    const [selectedCurrency, setSelectedCurrency] = useState('');
+
+
     const [taxAmount, setTaxAmount] = useState(0);
     const [invoiceTotal, setInvoiceTotal] = useState(0);
     const [clientOptions, setClientOptions] = useState([]);
@@ -141,8 +146,15 @@ const EditInvoiceModal = ({ isOpen, toggle, invoiceData, refreshInvoices, userId
     };
 
     const handleTaxChange = (e) => {
-        setSelectedTax(e.target.value);
+        const newTaxId = e.target.value;
+        const selectedTaxOption = taxOptions.find(tax => tax.value === newTaxId);
+        setSelectedTax(newTaxId);
+        setInvoice(prevInvoice => ({
+            ...prevInvoice,
+            tax: selectedTaxOption // Update the tax in the invoice object
+        }));
     };
+    
 
     useEffect(() => {
         const subtotal = calculateSubtotal();
@@ -156,11 +168,12 @@ const EditInvoiceModal = ({ isOpen, toggle, invoiceData, refreshInvoices, userId
         try {
             // Log the invoice ID being sent
             console.log(`Invoice ID being sent: ${invoice._id}`);
-
+    
             const formData = new FormData();
-
-            // Make sure to send only the client ObjectId
-            formData.append('client', invoice.client._id); // Use client._id instead of the whole object
+    
+            // Append fields to FormData
+            formData.append('client', invoice.client._id);
+            console.log(invoice.client._id)
             formData.append('number', invoice.number);
             formData.append('year', invoice.year);
             formData.append('currency', invoice.currency._id);
@@ -169,6 +182,7 @@ const EditInvoiceModal = ({ isOpen, toggle, invoiceData, refreshInvoices, userId
             formData.append('note', invoice.note);
             formData.append('type', invoice.type);
 
+    
             // Append items to FormData
             invoice.items.forEach((item, index) => {
                 formData.append(`items[${index}][article]`, item.article);
@@ -177,40 +191,43 @@ const EditInvoiceModal = ({ isOpen, toggle, invoiceData, refreshInvoices, userId
                 formData.append(`items[${index}][price]`, item.price);
                 formData.append(`items[${index}][total]`, item.total);
             });
-
+    
             formData.append('subtotal', calculateSubtotal());
-
+    
             // Log selected tax
             console.log("Selected Tax:", selectedTax);
-
-            // Append tax only if selectedTax is defined and has an _id
+    
             if (selectedTax && selectedTax._id) {
-                formData.append('tax', selectedTax._id);
+                formData.append('tax', selectedTax._id); // Ensure tax ID is included
             } else {
                 console.warn("No valid tax ID found, skipping tax append.");
-                // Handle what to do if tax is not set
             }
-
+    
             formData.append('taxAmount', taxAmount);
             formData.append('total', invoiceTotal);
             formData.append('createdBy', userId);
-
+    
             // Append the image file if it exists
             if (factureImage) {
                 formData.append('factureImage', factureImage);
             }
-
+    
+            // Log FormData for debugging
+            for (let pair of formData.entries()) {
+                console.log(`${pair[0]}: ${pair[1]}`);
+            }
+    
             // Determine payment status
             let paymentStatus = invoice.paidAmount >= invoice.total ? 'Payé' : 'impayé';
-
-            // Send the invoice data including the image (if provided)
+    
+            // Send the invoice data
             await axios.put(`http://localhost:5000/api/invoices/invoices/${invoice._id}`, formData, {
                 headers: {
                     'Content-Type': 'multipart/form-data',
                     Authorization: `Bearer ${localStorage.getItem('token')}`
                 }
             });
-
+    
             // Update payment status if necessary
             if (paymentStatus === 'impayé') {
                 await axios.put(`http://localhost:5000/api/invoices/invoices/${invoice._id}`, {
@@ -221,7 +238,7 @@ const EditInvoiceModal = ({ isOpen, toggle, invoiceData, refreshInvoices, userId
                     }
                 });
             }
-
+    
             // Show success toast
             toast.success('Facture mise à jour avec succès', {
                 autoClose: 2000,
@@ -231,12 +248,12 @@ const EditInvoiceModal = ({ isOpen, toggle, invoiceData, refreshInvoices, userId
                 draggable: true,
                 progress: undefined,
             });
-
+    
             refreshInvoices();
             toggle();
         } catch (error) {
             console.error("Error updating invoice:", error);
-
+    
             if (error.response && error.response.status === 400) {
                 toast.error('Le numéro de facture existe déjà. Veuillez utiliser un numéro unique.', {
                     autoClose: 3000,
@@ -258,8 +275,8 @@ const EditInvoiceModal = ({ isOpen, toggle, invoiceData, refreshInvoices, userId
             }
         }
     };
-
-
+    
+   
 
     const handleProductChange = (index, selectedOption) => {
         const newItems = [...invoice.items];
@@ -297,6 +314,8 @@ const EditInvoiceModal = ({ isOpen, toggle, invoiceData, refreshInvoices, userId
     return (
         <Modal isOpen={isOpen} toggle={toggle} size="lg">
             <ModalHeader toggle={toggle}>Modifier facture</ModalHeader>
+            <h1>{invoiceData.tax.value}</h1>
+
             <ModalBody>
                 <Row form>
                     <Col md={6}>
@@ -492,16 +511,17 @@ const EditInvoiceModal = ({ isOpen, toggle, invoiceData, refreshInvoices, userId
                                 type="select"
                                 name="tax"
                                 id="tax"
-                                value={selectedTax}
+                                value={selectedTax ? selectedTax : ''} // Ensure selectedTax is correctly set
                                 onChange={handleTaxChange}
                             >
-                                <option>{selectedTax.value}%</option>
+                                <option value="">Select Tax</option>
                                 {taxOptions.map((tax) => (
                                     <option key={tax.value} value={tax.value}>
                                         {tax.label}
                                     </option>
                                 ))}
                             </Input>
+
                         </FormGroup>
                     </Col>
                 </Row>

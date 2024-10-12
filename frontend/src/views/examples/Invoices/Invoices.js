@@ -453,7 +453,7 @@ const Invoices = () => {
                     <div className="col">
                         <Card className="shadow" >
                             <CardHeader className="border-0 d-flex justify-content-between align-items-center">
-                                <h3 className="mb-0">Liste des factures Achats</h3>
+                                <h3 className="mb-0">Liste des factures Ventes</h3>
                                 <div className="d-flex">
                                     {/* Non-clickable buttons */}
                                     <Button color="success" className="ml-2" disabled>
@@ -534,7 +534,6 @@ const Invoices = () => {
                                                             checked={selectedInvoices.some(selected => selected._id === invoice._id)} // Check if the full invoice object is selected
                                                         />
                                                     </td>
-
                                                     <td>{invoice.number}</td>
                                                     <td>{getClientNameById(invoice.client._id)}</td>
                                                     <td>{new Date(invoice.date).toLocaleDateString()}</td>
