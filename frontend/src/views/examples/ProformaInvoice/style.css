@@ -1,0 +1,31 @@
+.invoice-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+  }
+  
+  .status-badges {
+    display: flex;
+    gap: 10px;
+  }
+  
+  .amounts-summary {
+    display: flex;
+    gap: 20px;
+  }
+  
+  .client-info {
+    margin-bottom: 20px;
+  }
+  
+  .totals-section {
+    margin-top: 20px;
+  }
+  
+  .action-buttons {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 20px;
+  }
+  
