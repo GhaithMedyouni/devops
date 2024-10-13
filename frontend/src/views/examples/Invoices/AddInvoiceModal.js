@@ -90,6 +90,21 @@ const AddInvoiceModal = ({ isOpen, toggle, refreshInvoices, userId }) => {
                 console.error("Error fetching currencies:", error);
             }
         };
+        const fetchProducts = async () => {
+            try {
+                const response = await axios.get('http://localhost:5000/api/product', {
+                    params: { createdBy: userId } // Adjust according to your API
+                });
+                setProductOptions(response.data.map(product => ({
+                    value: product._id,
+                    label: product.name, // Adjust to the property you want to show
+                    price: product.price, // Assuming price is a property
+                    description: product.description // Assuming description is a property
+                })));
+            } catch (error) {
+                console.error("Error fetching products:", error);
+            }
+        };
 
         fetchTaxes();
         fetchClients();
