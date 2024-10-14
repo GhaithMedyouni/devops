@@ -487,7 +487,6 @@ const ProformaInvoice = () => {
                                                     />
                                                 </div>
                                             </th>
-                                            <th>taxe</th>
                                             <th scope="col">Numéro de facture</th>
                                             <th scope="col">Client</th>
                                             <th scope="col">Date</th>
