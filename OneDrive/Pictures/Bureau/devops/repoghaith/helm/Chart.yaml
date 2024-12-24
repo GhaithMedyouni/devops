@@ -1,0 +1,5 @@
+apiVersion: v2
+name: stationski
+description: A Helm chart for deploying StationSki application
+version: 1.0.0
+appVersion: "1.0"

@@ -1,0 +1,44 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: monitoring-pod
+  labels:
+    app: monitoring
+spec:
+  containers:
+    - name: prometheus
+      image: prom/prometheus:latest
+      ports:
+        - containerPort: 9090
+      volumeMounts:
+        - name: prometheus-config
+          mountPath: /etc/prometheus/
+      args:
+        - "--config.file=/etc/prometheus/prometheus.yml"
+    - name: grafana
+      image: grafana/grafana:latest
+      ports:
+        - containerPort: 3000
+      env:
+        - name: GF_SECURITY_ADMIN_PASSWORD
+          value: "htgawm" 
+  volumes:
+    - name: prometheus-config
+      configMap:
+        name: prometheus-config
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+    scrape_configs:
+      - job_name: 'springboot-app'
+        static_configs:
+          - targets: ['48.216.161.164:9000'] 
+      - job_name: 'angular-app'
+        static_configs:
+          - targets: ['135.237.59.32:80']
