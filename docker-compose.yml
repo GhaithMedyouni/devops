@@ -18,7 +18,7 @@ services:
       - mysql-data:/var/lib/mysql
 
   backend:
-    image: shankes99/iheb-img:1.1
+    image: shankes99/iheb-img:1.2
     container_name: backend-container
     environment:
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/stationSki?createDatabaseIfNotExist=true
